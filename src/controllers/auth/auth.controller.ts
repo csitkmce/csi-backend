@@ -22,7 +22,7 @@ export const loginUser = async (req: Request, res: Response) => {
 export const registerUser = async (req: Request, res: Response) => {
   const { name, email, department, batch, year, phone_number, password } = req.body;
 
-  if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -38,7 +38,7 @@ export const registerUser = async (req: Request, res: Response) => {
     res.status(201).json({ user, token });
   } catch (err: any) {
     if (err.code === '23505') {
-      return res.status(400).json({ message: 'Email already exists' });
+      return res.status(400).json({ error: 'Email already exists' });
     }
     res.status(500).json({ message: 'Registration failed', error: err.message });
   }
