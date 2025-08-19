@@ -4,13 +4,14 @@ export async function initDB() {
   try {
     await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
 
+    // ENUMs
     await pool.query(`DO $$
     BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
         CREATE TYPE user_role AS ENUM ('student', 'admin', 'master');
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_type') THEN
-        CREATE TYPE event_type AS ENUM ('event', 'hackathon');
+        CREATE TYPE event_type AS ENUM ('solo', 'team');
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_status') THEN
         CREATE TYPE event_status AS ENUM ('active', 'inactive');
@@ -45,21 +46,32 @@ export async function initDB() {
 
     // Events
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS events (
-        event_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        type event_type NOT NULL,
-        event_name VARCHAR(255) NOT NULL,
-        event_description TEXT,
-        venue VARCHAR(255),
-        reg_start_time TIMESTAMP,
-        reg_end_time TIMESTAMP,
-        event_start_time TIMESTAMP,
-        event_end_time TIMESTAMP,
-        fee_amount DECIMAL(10,2) DEFAULT 0,
-        status event_status DEFAULT 'active',
-        max_registrations INT
-      );
-    `);
+  CREATE TABLE IF NOT EXISTS events (
+    event_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    type event_type NOT NULL,
+    event_name VARCHAR(255) NOT NULL,
+    event_description TEXT,
+    venue VARCHAR(255),
+    reg_start_time TIMESTAMP,
+    reg_end_time TIMESTAMP,
+    event_start_time TIMESTAMP,
+    event_end_time TIMESTAMP,
+    fee_amount DECIMAL(10,2) DEFAULT 0,
+    status event_status DEFAULT 'active',
+    max_registrations INT,
+    whatsapp_link VARCHAR(500) 
+  );
+`);
+
+    // Team-event rules (event_id is PK and FK)
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS team_event (
+    event_id UUID PRIMARY KEY REFERENCES events(event_id) ON DELETE CASCADE,
+    non_veg BOOLEAN DEFAULT false,
+    food BOOLEAN DEFAULT false, -- NEW
+    max_team_size INT NOT NULL DEFAULT 4
+  );
+`);
 
     // Team code generator function
     await pool.query(`
@@ -77,7 +89,7 @@ export async function initDB() {
       $$ LANGUAGE plpgsql;
     `);
 
-    // Trigger function to auto-assign unique team_code
+    // Trigger function to auto-assign unique team_code per event
     await pool.query(`
       CREATE OR REPLACE FUNCTION assign_team_code()
       RETURNS TRIGGER AS $$
@@ -86,7 +98,9 @@ export async function initDB() {
       BEGIN
         LOOP
           new_code := generate_team_code(6);
-          EXIT WHEN NOT EXISTS (SELECT 1 FROM teams WHERE team_code = new_code);
+          EXIT WHEN NOT EXISTS (
+            SELECT 1 FROM teams WHERE event_id = NEW.event_id AND team_code = new_code
+          );
         END LOOP;
         NEW.team_code := new_code;
         RETURN NEW;
@@ -94,13 +108,16 @@ export async function initDB() {
       $$ LANGUAGE plpgsql;
     `);
 
-    // Teams
+    // Teams (team_code unique per event)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS teams (
-        team_code TEXT PRIMARY KEY,
+        team_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        team_code TEXT NOT NULL,
         team_name VARCHAR(255) NOT NULL,
         team_lead_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
-        UNIQUE(team_name, team_lead_id)
+        event_id UUID REFERENCES events(event_id) ON DELETE CASCADE,
+        UNIQUE(event_id, team_code),
+        UNIQUE(team_name, team_lead_id, event_id)
       );
     `);
 
@@ -120,17 +137,7 @@ export async function initDB() {
       END$$;
     `);
 
-    // Hackathon registrations
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS hackathon_registrations (
-        registration_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        team_code TEXT REFERENCES teams(team_code) ON DELETE CASCADE,
-        event_id UUID REFERENCES events(event_id) ON DELETE CASCADE,
-        UNIQUE(team_code, event_id)
-      );
-    `);
-
-    // Registrations
+    // Registrations (base table)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS registrations (
         registration_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -138,17 +145,29 @@ export async function initDB() {
         timestamp TIMESTAMP DEFAULT NOW(),
         student_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
         event_id UUID REFERENCES events(event_id) ON DELETE CASCADE,
-        team_code TEXT REFERENCES teams(team_code) ON DELETE SET NULL,
         ticket VARCHAR(255),
         certificate VARCHAR(255),
         status registration_status DEFAULT 'absent',
         payment_status BOOLEAN DEFAULT false,
         payment_reference_id VARCHAR(255),
-        UNIQUE(student_id, event_id),
-        CHECK (
-          (type = 'hackathon' AND team_code IS NOT NULL) OR
-          (type = 'event' AND team_code IS NULL)
-        )
+        UNIQUE(student_id, event_id)
+      );
+    `);
+
+    // Team registrations (registration_id reused from registrations)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS team_registrations (
+        registration_id UUID PRIMARY KEY REFERENCES registrations(registration_id) ON DELETE CASCADE,
+        team_id UUID REFERENCES teams(team_id) ON DELETE CASCADE,
+        UNIQUE(team_id, registration_id)
+      );
+    `);
+
+    // Positions
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS positions (
+        position_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        title VARCHAR(255) UNIQUE NOT NULL
       );
     `);
 
@@ -160,13 +179,13 @@ export async function initDB() {
         year INT,
         academic_year INT,
         batch CHAR(10),
-        position VARCHAR(255),
+        position_id UUID REFERENCES positions(position_id) ON DELETE SET NULL,
         upload_image VARCHAR(255),
         social_link VARCHAR(255)
       );
     `);
 
-    console.log("Tables created/checked successfully");
+    console.log("Tables created/checked successfully ");
   } catch (err) {
     console.error("Error initializing database:", err);
   }
