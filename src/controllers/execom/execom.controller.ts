@@ -25,7 +25,7 @@ export const getYears = async (req: Request, res: Response) => {
 };
 
 export const getExecomByYear = async (req: Request, res: Response) => {
-  const { year } = req.params; 
+  const { year } = req.params;
 
   try {
     const query = `
@@ -37,7 +37,7 @@ export const getExecomByYear = async (req: Request, res: Response) => {
         e.academic_year,
         p.title AS position
       FROM execom e
-      LEFT JOIN positions p ON e.position_id = p.position_id
+      LEFT JOIN execom_positions p ON e.position_id = p.position_id
       WHERE e.academic_year = $1
       ORDER BY p.title, e.name
     `;
