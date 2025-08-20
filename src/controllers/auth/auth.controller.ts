@@ -28,7 +28,7 @@ export const registerUser = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
-      'INSERT INTO users (name, role, email, phone_number, department, batch, year, password) VALUES ($1, \'student\', $2, $3, $4, $5, $6, $7 ) RETURNING user_id, name, email',
+      'INSERT INTO users (name, role, email, phone_number, department_id, batch, year, password) VALUES ($1, \'student\', $2, $3, $4, $5, $6, $7 ) RETURNING user_id, name, email',
       [name, email, phone_number, department, batch, year, hashedPassword]
     );
 
