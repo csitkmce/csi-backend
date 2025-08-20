@@ -66,7 +66,7 @@ export const getExecomByYear = async (req: Request, res: Response) => {
       });
     });
 
-    return res.status(200).json({ academic_year: year, ...grouped });
+    return res.status(200).json({ ...grouped });
   } catch (error) {
     console.error("Execom academic year view error:", error);
     return res
