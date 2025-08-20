@@ -15,8 +15,8 @@ export const loginUser = async (req: Request, res: Response) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
 
-    const tokens = generateTokens({ id: user.id, email: user.email });
-    res.json({ ...tokens, user: { id: user.id, email: user.email } });
+    const tokens = generateTokens({ user_id: user.user_id});
+    res.json({ ...tokens, user: { user_id: user.user_id } });
 }
 
 export const registerUser = async (req: Request, res: Response) => {
@@ -33,7 +33,7 @@ export const registerUser = async (req: Request, res: Response) => {
     );
 
     const user = result.rows[0];
-    const token = await generateTokens({ user_id: user.user_id, name: user.name, email: user.email });
+    const token = await generateTokens({ user_id: user.user_id });
 
     res.status(201).json({ user, token });
   } catch (err: any) {
@@ -48,7 +48,7 @@ export const refreshToken = (req: Request, res: Response) => {
   const { refreshToken } = req.body;
   try {
     const payload = verifyRefreshToken(refreshToken) as any;
-    const tokens = generateTokens({ user_id: payload.user_id, name: payload.name, email: payload.email });
+    const tokens = generateTokens({ user_id: payload.user_id });
     res.json({ ...tokens });
   } catch (err) {
     res.status(401).json({ error: 'Invalid refresh token' });
