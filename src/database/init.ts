@@ -173,17 +173,17 @@ export async function initDB() {
 
     // Execom
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS execom (
-        execom_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        name VARCHAR(255) NOT NULL,
-        year INT,
-        academic_year INT,
-        batch CHAR(10),
-        position_id UUID REFERENCES positions(position_id) ON DELETE SET NULL,
-        upload_image VARCHAR(255),
-        social_link VARCHAR(255)
-      );
-    `);
+  CREATE TABLE IF NOT EXISTS execom (
+    execom_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    year INT,
+    academic_year INT,
+    batch VARCHAR(10),
+    position_id UUID REFERENCES positions(position_id) ON DELETE SET NULL,
+    upload_image VARCHAR(255),
+    social_link VARCHAR(255)
+  );
+`);
 
     console.log("Tables created/checked successfully ");
   } catch (err) {
