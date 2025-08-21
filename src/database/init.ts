@@ -10,14 +10,11 @@ export async function initDB() {
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
         CREATE TYPE user_role AS ENUM ('student', 'admin', 'master');
       END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_type') THEN
-        CREATE TYPE event_type AS ENUM ('solo', 'team');
-      END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_status') THEN
         CREATE TYPE event_status AS ENUM ('active', 'inactive');
       END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'registration_status') THEN
-        CREATE TYPE registration_status AS ENUM ('present', 'absent');
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attendance_status') THEN
+        CREATE TYPE attendance_status AS ENUM ('present', 'absent');
       END IF;
     END$$;`);
 
@@ -46,32 +43,25 @@ export async function initDB() {
 
     // Events
     await pool.query(`
-  CREATE TABLE IF NOT EXISTS events (
-    event_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    type event_type NOT NULL,
-    event_name VARCHAR(255) NOT NULL,
-    event_description TEXT,
-    venue VARCHAR(255),
-    reg_start_time TIMESTAMP,
-    reg_end_time TIMESTAMP,
-    event_start_time TIMESTAMP,
-    event_end_time TIMESTAMP,
-    fee_amount DECIMAL(10,2) DEFAULT 0,
-    status event_status DEFAULT 'active',
-    max_registrations INT,
-    whatsapp_link VARCHAR(500) 
-  );
-`);
-
-    // Team-event rules (event_id is PK and FK)
-    await pool.query(`
-  CREATE TABLE IF NOT EXISTS team_event (
-    event_id UUID PRIMARY KEY REFERENCES events(event_id) ON DELETE CASCADE,
-    non_veg BOOLEAN DEFAULT false,
-    food BOOLEAN DEFAULT false, -- NEW
-    max_team_size INT NOT NULL DEFAULT 4
-  );
-`);
+      CREATE TABLE IF NOT EXISTS events (
+        event_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        event_name VARCHAR(255) NOT NULL,
+        event_description TEXT,
+        event_image VARCHAR(255),
+        venue VARCHAR(255),
+        reg_start_time TIMESTAMP,
+        reg_end_time TIMESTAMP,
+        event_start_time TIMESTAMP,
+        event_end_time TIMESTAMP,
+        fee_amount DECIMAL(10,2) DEFAULT 0,
+        status event_status DEFAULT 'active',
+        max_registrations INT,
+        whatsapp_link VARCHAR(500),
+        food BOOLEAN DEFAULT false,
+        min_team_size INT DEFAULT 1,
+        max_team_size INT DEFAULT 1
+      );
+    `);
 
     // Team code generator function
     await pool.query(`
@@ -108,7 +98,7 @@ export async function initDB() {
       $$ LANGUAGE plpgsql;
     `);
 
-    // Teams (team_code unique per event)
+    // Teams
     await pool.query(`
       CREATE TABLE IF NOT EXISTS teams (
         team_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -137,24 +127,23 @@ export async function initDB() {
       END$$;
     `);
 
-    // Registrations (base table)
+    // Registrations
     await pool.query(`
       CREATE TABLE IF NOT EXISTS registrations (
         registration_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        type event_type NOT NULL,
         timestamp TIMESTAMP DEFAULT NOW(),
         student_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
         event_id UUID REFERENCES events(event_id) ON DELETE CASCADE,
-        ticket VARCHAR(255),
         certificate VARCHAR(255),
-        status registration_status DEFAULT 'absent',
+        attendance_status attendance_status DEFAULT 'absent',
         payment_status BOOLEAN DEFAULT false,
         payment_reference_id VARCHAR(255),
+        non_veg BOOLEAN DEFAULT false,
         UNIQUE(student_id, event_id)
       );
     `);
 
-    // Team registrations (registration_id reused from registrations)
+    // Team registrations
     await pool.query(`
       CREATE TABLE IF NOT EXISTS team_registrations (
         registration_id UUID PRIMARY KEY REFERENCES registrations(registration_id) ON DELETE CASCADE,
@@ -163,27 +152,27 @@ export async function initDB() {
       );
     `);
 
-    // Positions
+    // Execom positions
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS positions (
+      CREATE TABLE IF NOT EXISTS execom_positions (
         position_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         title VARCHAR(255) UNIQUE NOT NULL
       );
     `);
 
-    // Execom
+    // Execom members
     await pool.query(`
-  CREATE TABLE IF NOT EXISTS execom (
-    execom_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    year INT,
-    academic_year INT,
-    batch VARCHAR(10),
-    position_id UUID REFERENCES positions(position_id) ON DELETE SET NULL,
-    upload_image VARCHAR(255),
-    social_link VARCHAR(255)
-  );
-`);
+      CREATE TABLE IF NOT EXISTS execom (
+        execom_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(255) NOT NULL,
+        year INT,
+        academic_year INT,
+        batch VARCHAR(10),
+        position_id UUID REFERENCES execom_positions(position_id) ON DELETE SET NULL,
+        upload_image VARCHAR(255),
+        social_link VARCHAR(255)
+      );
+    `);
 
     console.log("Tables created/checked successfully ");
   } catch (err) {
