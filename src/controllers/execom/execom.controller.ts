@@ -53,8 +53,8 @@ export const getExecomByYear = async (req: Request, res: Response) => {
 
     rows.forEach((member) => {
       const parts = (member.position || "Unknown-Unknown").split("-", 2);
-      const team = (parts[0] ?? "Unknown").trim();
-      const role = (parts[1] ?? "Unknown").trim();
+      const team = (parts[0] ?? "").trim();
+      const role = (parts[1] ?? "").trim();
 
       if (!grouped[team]) grouped[team] = [];
 
