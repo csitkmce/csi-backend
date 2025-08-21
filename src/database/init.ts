@@ -156,7 +156,8 @@ export async function initDB() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS execom_positions (
         position_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        title VARCHAR(255) UNIQUE NOT NULL
+        title VARCHAR(255) UNIQUE NOT NULL,
+        Priority INT
       );
     `);
 

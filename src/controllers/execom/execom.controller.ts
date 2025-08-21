@@ -28,19 +28,22 @@ export const getExecomByYear = async (req: Request, res: Response) => {
   const { year } = req.params;
 
   try {
-    const query = `
-      SELECT 
-        e.name,
-        e.batch,
-        e.upload_image,
-        e.social_link,
-        e.academic_year,
-        p.title AS position
-      FROM execom e
-      LEFT JOIN execom_positions p ON e.position_id = p.position_id
-      WHERE e.academic_year = $1
-      ORDER BY p.title, e.name
-    `;
+  const query = `
+  SELECT 
+    e.name,
+    e.batch,
+    e.upload_image,
+    e.social_link,
+    e.academic_year,
+    p.title AS position,
+    p."Priority" AS priority
+  FROM execom e
+  LEFT JOIN execom_positions p ON e.position_id = p.position_id
+  WHERE e.academic_year = $1
+  ORDER BY p."Priority" ASC, e.name ASC
+`;
+
+
     const { rows } = await pool.query(query, [year]);
 
     if (!rows.length) {
@@ -69,10 +72,8 @@ export const getExecomByYear = async (req: Request, res: Response) => {
     return res.status(200).json({ ...grouped });
   } catch (error) {
     console.error("Execom academic year view error:", error);
-    return res
-      .status(500)
-      .json({
-        error: `Failed to load execom members for academic year ${year}`,
-      });
+    return res.status(500).json({
+      error: `Failed to load execom members for academic year ${year}`,
+    });
   }
 };
