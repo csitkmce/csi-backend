@@ -25,7 +25,7 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
       `SELECT e.event_id, e.event_name, e.event_description, e.event_image, e.venue,
               e.event_start_time, e.event_end_time, e.whatsapp_link,
               e.min_team_size, e.max_team_size,
-              r.registration_id
+              r.registration_id, r.certificate
        FROM registrations r
        JOIN events e ON r.event_id = e.event_id
        WHERE r.student_id = $1
@@ -55,30 +55,40 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
           min: event.min_team_size,
           max: event.max_team_size,
         },
+        certificate: event.certificate || null,
       };
 
       if (event.min_team_size > 1) {
-        const teamMembers = await pool.query(
+        const teamInfo = await pool.query(
           `
-          SELECT u.user_id, u.name
+          SELECT t.team_code, u.user_id, u.name
           FROM team_registrations tr
+          JOIN teams t ON tr.team_id = t.team_id
           JOIN registrations r2 ON tr.registration_id = r2.registration_id
           JOIN users u ON r2.student_id = u.user_id
-          WHERE tr.team_id = (
+          WHERE t.team_id = (
             SELECT team_id
             FROM team_registrations
             WHERE registration_id = $1
             LIMIT 1
           )
-          AND u.user_id != $2
           `,
-          [event.registration_id, userId]
+          [event.registration_id]
         );
 
-        eventData.teamMembers = teamMembers.rows.map((m) => ({
-          id: m.user_id,
-          name: m.name,
-        }));
+        if ((teamInfo?.rowCount ?? 0) > 0) {
+          const teamCode = teamInfo.rows[0].team_code;
+
+          const members = teamInfo.rows
+            .filter((m) => m.user_id !== userId)
+            .map((m) => ({
+              id: m.user_id,
+              name: m.name,
+            }));
+
+          eventData.teamCode = teamCode;
+          eventData.teamMembers = members;
+        }
       }
 
       events.push(eventData);
