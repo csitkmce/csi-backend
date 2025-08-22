@@ -30,7 +30,6 @@ function calculateDayDiff(start: Date, end: Date): number {
 
 export const getEvents = async (req: Request, res: Response) => {
   try {
-
     const { rows } = await pool.query(`
      SELECT 
       e.*,
@@ -64,17 +63,9 @@ export const getEvents = async (req: Request, res: Response) => {
       const currentRegs = Number(event.registrations_count) || 0;
       const maxRegs = Number(event.max_registrations) || 0;
 
-      let regOpen = true;
-      let isRegistrationFull = false;
+      const regOpen = now >= regStart && now <= regEnd;
 
-      if (now >= regStart && now <= regEnd) {
-        if (maxRegs > 0 && currentRegs >= maxRegs) {
-          regOpen = false;
-          isRegistrationFull = true;
-        } else {
-          regOpen = true;
-        }
-      }
+      const isRegistrationFull = maxRegs > 0 && currentRegs >= maxRegs;
 
       const durationDays = calculateDayDiff(start, end);
       const eventData = {
