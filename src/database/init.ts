@@ -132,8 +132,8 @@ export async function initDB() {
       CREATE TABLE IF NOT EXISTS registrations (
         registration_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         timestamp TIMESTAMP DEFAULT NOW(),
-        student_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
-        event_id UUID REFERENCES events(event_id) ON DELETE CASCADE,
+        student_id UUID REFERENCES users(user_id) ON DELETE CASCADE NOT NULL,
+        event_id UUID REFERENCES events(event_id) ON DELETE CASCADE NOT NULL,
         certificate VARCHAR(255),
         attendance_status attendance_status DEFAULT 'absent',
         payment_status BOOLEAN DEFAULT false,
