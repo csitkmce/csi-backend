@@ -16,6 +16,7 @@ function formatTime(date: Date): string {
     hour12: true,
   });
 }
+
 function calculateDayDiff(start: Date, end: Date): number {
   const startDate = new Date(
     start.getFullYear(),
@@ -55,6 +56,8 @@ export const getEvents = async (req: Request, res: Response) => {
     const past: any[] = [];
 
     rows.forEach((event) => {
+      if (event.status !== "active") return;
+
       const start = new Date(event.event_start_time);
       const end = new Date(event.event_end_time);
       const regStart = new Date(event.reg_start_time);
@@ -64,10 +67,10 @@ export const getEvents = async (req: Request, res: Response) => {
       const maxRegs = Number(event.max_registrations) || 0;
 
       const regOpen = now >= regStart && now <= regEnd;
-
       const isRegistrationFull = maxRegs > 0 && currentRegs >= maxRegs;
 
       const durationDays = calculateDayDiff(start, end);
+
       const eventData = {
         id: event.event_id,
         name: event.event_name,
@@ -95,9 +98,6 @@ export const getEvents = async (req: Request, res: Response) => {
           min: event.min_team_size,
           max: event.max_team_size,
         },
-        status: event.status,
-        registrationsCount: currentRegs,
-        maxRegistrations: maxRegs,
       };
 
       // Categorization
