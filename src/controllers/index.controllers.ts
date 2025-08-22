@@ -24,7 +24,8 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
     const { rows } = await pool.query(
       `SELECT e.event_id, e.event_name, e.event_description, e.event_image, e.venue,
               e.event_start_time, e.event_end_time, e.whatsapp_link,
-              e.min_team_size, e.max_team_size
+              e.min_team_size, e.max_team_size,
+              r.registration_id
        FROM registrations r
        JOIN events e ON r.event_id = e.event_id
        WHERE r.student_id = $1
@@ -32,11 +33,13 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
       [userId]
     );
 
-    const events = rows.map((event) => {
+    const events = [];
+
+    for (const event of rows) {
       const start = new Date(event.event_start_time);
       const end = new Date(event.event_end_time);
 
-      return {
+      const eventData: any = {
         id: event.event_id,
         name: event.event_name,
         description: event.event_description,
@@ -53,7 +56,33 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
           max: event.max_team_size,
         },
       };
-    });
+
+      if (event.min_team_size > 1) {
+        const teamMembers = await pool.query(
+          `
+          SELECT u.user_id, u.name
+          FROM team_registrations tr
+          JOIN registrations r2 ON tr.registration_id = r2.registration_id
+          JOIN users u ON r2.student_id = u.user_id
+          WHERE tr.team_id = (
+            SELECT team_id
+            FROM team_registrations
+            WHERE registration_id = $1
+            LIMIT 1
+          )
+          AND u.user_id != $2
+          `,
+          [event.registration_id, userId]
+        );
+
+        eventData.teamMembers = teamMembers.rows.map((m) => ({
+          id: m.user_id,
+          name: m.name,
+        }));
+      }
+
+      events.push(eventData);
+    }
 
     return res.json({ name: userName, events });
   } catch (err) {
