@@ -2,7 +2,7 @@ import { type Request, type Response } from "express";
 import { pool } from "../../config/db.js";
 
 export const getExecom = (req: Request, res: Response) => {
-  res.json({ message: "Execom endpoint working!" });
+  res.json({ message: "Execom endpoint" });
 };
 
 export const getYears = async (req: Request, res: Response) => {
