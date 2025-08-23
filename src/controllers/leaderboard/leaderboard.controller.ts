@@ -1,10 +1,7 @@
-import { Router } from "express";
-import { pool } from "../config/db.js";
+import { type Request, type Response } from "express";
+import { pool } from "../../config/db.js";
 import fetch from "node-fetch";
 
-const router = Router();
-
-// helper to fetch stats from LeetCode GraphQL
 async function getStats(username: string) {
   const query = {
     query: `
@@ -38,53 +35,35 @@ async function getStats(username: string) {
   };
 }
 
-router.get("/", async (req, res) => {
+export const getLeaderboard = async (req: Request, res: Response) => {
   try {
-    // fetch name + username from DB
     const result = await pool.query("SELECT name, username FROM leetcode_users");
     const users = result.rows;
-    console.log("Fetched users from DB:", users);
 
-    // fetch LeetCode stats for each username
     const stats = await Promise.all(
-      users.map(u =>
-        getStats(u.username).then(s => ({
-          dbName: u.name,      // <-- use DB name
+      users.map((u) =>
+        getStats(u.username).then((s) => ({
+          dbName: u.name, 
           username: u.username,
           totalSolved: s.totalSolved,
         }))
       )
     );
-    console.log("Fetched stats:", stats);
 
-    // sort by problems solved
     stats.sort((a, b) => b.totalSolved - a.totalSolved);
 
-    // build leaderboard
     const leaderboard = stats.map((u, i) => ({
       rank: i + 1,
-      name: u.dbName,         // <-- show DB name here
+      name: u.dbName, 
       points: u.totalSolved,
     }));
 
-    res.json(leaderboard);
-  } catch (err) {
-    if (err && typeof err === "object" && "message" in err) {
-      console.error(
-        "Leaderboard error:",
-        (err as { message: string; stack?: string }).message,
-        (err as { stack?: string }).stack
-      );
-      res
-        .status(500)
-        .json({ error: "Failed to fetch leaderboard", details: (err as { message: string }).message });
-    } else {
-      console.error("Leaderboard error:", err);
-      res
-        .status(500)
-        .json({ error: "Failed to fetch leaderboard", details: String(err) });
-    }
+    res.status(200).json(leaderboard);
+  } catch (error) {
+    console.error("Leaderboard error:", error);
+    return res.status(500).json({
+      error: "Failed to fetch leaderboard",
+      details: error instanceof Error ? error.message : String(error),
+    });
   }
-});
-
-export default router;
+};

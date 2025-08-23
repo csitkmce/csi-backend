@@ -5,7 +5,7 @@ import deptRoutes from "./dept/dept.route.js";
 import execomRoutes from './execom/execom.routes.js';
 import eventRoutes from './event/event.routes.js';
 import { authenticate } from "../middleware/auth.middle.js";
-import leaderboardRoutes from "./leaderboard.js";
+import leaderboardRoutes from "./leaderboard/leaderboard.routes.js";
 
 
 const router = Router();
