@@ -51,8 +51,8 @@ export const getLeaderboard = async (req: Request, res: Response) => {
     );
 
     stats.sort((a, b) => b.totalSolved - a.totalSolved);
-
-    const leaderboard = stats.map((u, i) => ({
+    const topStats = stats.slice(0, 15);
+    const leaderboard = topStats.map((u, i) => ({
       rank: i + 1,
       name: u.dbName, 
       points: u.totalSolved,
