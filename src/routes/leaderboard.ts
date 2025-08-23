@@ -53,7 +53,7 @@ router.get("/", async (req, res) => {
       points: u.totalSolved,
     }));
 
-    res.json({ leaderboard });
+    res.json(leaderboard);
   } catch (err) {
     if (err && typeof err === "object" && "message" in err) {
       console.error("Leaderboard error:", (err as { message: string; stack?: string }).message, (err as { stack?: string }).stack);
