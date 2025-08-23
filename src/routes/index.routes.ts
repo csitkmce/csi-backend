@@ -5,6 +5,7 @@ import deptRoutes from "./dept/dept.route.js";
 import execomRoutes from './execom/execom.routes.js';
 import eventRoutes from './event/event.routes.js';
 import { authenticate } from "../middleware/auth.middle.js";
+import leaderboardRoutes from "./leaderboard.js";
 
 
 const router = Router();
@@ -14,6 +15,7 @@ router.use('/auth', authRoutes);
 router.use('/execom', execomRoutes);
 router.use('/data', deptRoutes);
 router.use('/events',eventRoutes);
+router.use('/leaderboard', leaderboardRoutes);
 
 
 export default router;
