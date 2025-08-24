@@ -1,11 +1,11 @@
-// src/database/init.ts
+// src/database/init.ts (Updated with payments table)
 import { pool } from "../config/db.js";
 
 export async function initDB() {
   try {
     // Set timezone to IST for this session
     await pool.query(`SET timezone TO 'Asia/Kolkata';`);
-    
+
     await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
 
     // ENUMs
@@ -19,6 +19,9 @@ export async function initDB() {
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attendance_status') THEN
         CREATE TYPE attendance_status AS ENUM ('present', 'absent');
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN
+        CREATE TYPE payment_status AS ENUM ('pending', 'completed', 'failed', 'refunded');
       END IF;
     END$$;`);
 
@@ -192,9 +195,23 @@ export async function initDB() {
         certificate VARCHAR(255),
         attendance_status attendance_status DEFAULT 'absent',
         payment_status BOOLEAN DEFAULT false,
-        payment_reference_id VARCHAR(255),
         non_veg BOOLEAN DEFAULT false,
         UNIQUE(student_id, event_id)
+      );
+    `);
+
+    // Payments table for Razorpay integration
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        payment_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        registration_id UUID UNIQUE REFERENCES registrations(registration_id) ON DELETE CASCADE NOT NULL,
+        razorpay_order_id VARCHAR(255) NOT NULL,
+        razorpay_payment_id VARCHAR(255),
+        razorpay_signature VARCHAR(255),
+        amount DECIMAL(10,2) NOT NULL,
+        status payment_status DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       );
     `);
 
@@ -320,6 +337,22 @@ export async function initDB() {
       ON events(max_team_size);
     `);
 
+    // Payments table indexes
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_payments_registration 
+      ON payments(registration_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_payments_razorpay_order 
+      ON payments(razorpay_order_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_payments_status 
+      ON payments(status);
+    `);
+
     // Create unique index for case-insensitive team names per event
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_event_team_name_unique 
@@ -341,23 +374,32 @@ export async function initDB() {
 
     // Set the database default timezone to IST (this affects the entire database)
     try {
-      await pool.query(`ALTER DATABASE ${process.env.DB_NAME || 'your_db_name'} SET timezone TO 'Asia/Kolkata';`);
+      await pool.query(
+        `ALTER DATABASE ${
+          process.env.DB_NAME || "your_db_name"
+        } SET timezone TO 'Asia/Kolkata';`
+      );
     } catch (error) {
-      console.log("Note: Could not set database timezone. You may need to run this manually with superuser privileges:");
-      console.log(`ALTER DATABASE your_database_name SET timezone TO 'Asia/Kolkata';`);
+      console.log(
+        "Note: Could not set database timezone. You may need to run this manually with superuser privileges:"
+      );
+      console.log(
+        `ALTER DATABASE your_database_name SET timezone TO 'Asia/Kolkata';`
+      );
     }
 
-    console.log("Tables, constraints, triggers, and indexes created/checked successfully");
+    console.log(
+      "Tables, constraints, triggers, and indexes created/checked successfully"
+    );
     console.log("Database timezone configured for IST (Asia/Kolkata)");
-    
+
     // Show current timezone to verify
     const timezoneResult = await pool.query(`SHOW timezone;`);
     console.log("Current session timezone:", timezoneResult.rows[0].TimeZone);
-    
+
     // Show current IST time
     const timeResult = await pool.query(`SELECT NOW() as current_ist_time;`);
     console.log("Current IST time:", timeResult.rows[0].current_ist_time);
-
   } catch (err) {
     console.error("Error initializing database:", err);
     throw err;

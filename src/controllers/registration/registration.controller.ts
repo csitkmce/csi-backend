@@ -1,6 +1,12 @@
 import { type Response } from "express";
 import { pool } from "../../config/db.js";
 import type { AuthenticatedRequest } from "../../middleware/auth.middle.js";
+import { 
+  validateEventAccess,
+  checkExistingRegistration,
+  handleRegistrationFlow,
+  getCurrentRegistrationCount
+} from "../../services/registration.service.js";
 
 export const registerForEvent = async (req: AuthenticatedRequest, res: Response) => {
   const client = await pool.connect();
@@ -10,6 +16,7 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
     const userName = req.user?.name;
     const { eventId, teamName } = req.body;
 
+    // Basic validation
     if (!userId || !eventId) {
       return res.status(400).json({ 
         success: false, 
@@ -27,74 +34,14 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
     await client.query("BEGIN");
     await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
-    const eventResult = await client.query(
-      `SELECT event_id, event_name, min_team_size, max_team_size, status,
-              reg_start_time, reg_end_time, max_registrations, fee_amount, team_name_required
-       FROM events WHERE event_id = $1 FOR UPDATE`,
-      [eventId]
-    );
-
-    if (eventResult.rowCount === 0) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ 
-        success: false, 
-        message: "Event not found" 
-      });
-    }
-
-    const event = eventResult.rows[0];
-
-    if (event.min_team_size < 1 || event.max_team_size < 1 || event.min_team_size > event.max_team_size) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid event configuration" 
-      });
-    }
-
-    if (event.status !== "active") {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Event is not active" 
-      });
-    }
-
-    const now = new Date();
-    if (event.reg_start_time && now < new Date(event.reg_start_time)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Registration has not started yet" 
-      });
-    }
-    if (event.reg_end_time && now > new Date(event.reg_end_time)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Registration has ended" 
-      });
-    }
-
-    const existingReg = await client.query(
-      `SELECT registration_id FROM registrations 
-       WHERE student_id = $1 AND event_id = $2 FOR UPDATE`,
-      [userId, eventId]
-    );
+    const event = await validateEventAccess(client, eventId);
     
-    if ((existingReg.rowCount ?? 0) > 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "You are already registered for this event" 
-      });
-    }
-
-    const isSoloEvent = event.max_team_size === 1;
-    const isTeamEvent = event.max_team_size > 1;
+    await checkExistingRegistration(client, userId, eventId);
 
     if (event.max_registrations) {
+      const isTeamEvent = event.max_team_size > 1;
       const currentCount = await getCurrentRegistrationCount(client, eventId, isTeamEvent);
+      
       if (currentCount >= event.max_registrations) {
         await client.query("ROLLBACK");
         return res.status(400).json({ 
@@ -104,27 +51,17 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
       }
     }
 
-    if (isSoloEvent) {
-      return await handleSoloEventRegistration(client, userId, eventId, event, res);
-    }
+    const result = await handleRegistrationFlow(
+      client, 
+      userId, 
+      userName.trim(), 
+      eventId, 
+      event, 
+      teamName
+    );
 
-    if (isTeamEvent) {
-      return await handleTeamEventRegistration(
-        client, 
-        userId, 
-        userName.trim(), 
-        eventId, 
-        event, 
-        teamName, 
-        res
-      );
-    }
-
-    await client.query("ROLLBACK");
-    return res.status(500).json({ 
-      success: false, 
-      message: "Unexpected error in event type determination" 
-    });
+    await client.query("COMMIT");
+    return res.status(201).json(result);
 
   } catch (error: any) {
     await client.query("ROLLBACK");
@@ -145,6 +82,13 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
       });
     }
 
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Registration failed due to server error",
@@ -155,200 +99,6 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
   }
 };
 
-// Helper function to get current registration count
-async function getCurrentRegistrationCount(client: any, eventId: string, isTeamEvent: boolean): Promise<number> {
-  let countQuery: string;
-  
-  if (isTeamEvent) {
-    countQuery = `SELECT COUNT(DISTINCT t.team_id) as count
-                 FROM team_registrations tr
-                 JOIN teams t ON tr.team_id = t.team_id
-                 WHERE t.event_id = $1
-                 FOR UPDATE OF t`;
-  } else {
-    countQuery = `SELECT COUNT(*) as count 
-                 FROM registrations r
-                 WHERE r.event_id = $1
-                 FOR UPDATE OF r`;
-  }
-
-  const countResult = await client.query(countQuery, [eventId]);
-  return parseInt(countResult.rows[0].count);
-}
-
-async function handleSoloEventRegistration(
-  client: any, 
-  userId: string, 
-  eventId: string, 
-  event: any, 
-  res: Response
-) {
-  const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id)
-     VALUES ($1, $2) RETURNING registration_id, timestamp`,
-    [userId, eventId]
-  );
-  
-  await client.query("COMMIT");
-  
-  return res.status(201).json({
-    success: true,
-    message: "Successfully registered for solo event",
-    data: {
-      registrationId: regResult.rows[0].registration_id,
-      eventName: event.event_name,
-      eventType: "solo",
-      feeAmount: event.fee_amount,
-      paymentRequired: parseFloat(event.fee_amount) > 0,
-      timestamp: regResult.rows[0].timestamp
-    }
-  });
-}
-
-// Handle team event registration
-async function handleTeamEventRegistration(
-  client: any,
-  userId: string,
-  userName: string,
-  eventId: string,
-  event: any,
-  teamName: string | undefined,
-  res: Response
-) {
-  let finalTeamName: string;
-
-  if (event.team_name_required) {
-    if (!teamName || teamName.trim() === "") {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Team name is required for this event" 
-      });
-    }
-    
-    const trimmedName = teamName.trim();
-    
-    if (trimmedName.length < 1 || trimmedName.length > 100) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Team name must be between 1 and 100 characters" 
-      });
-    }
-
-    if (!/^[\w\s\-_()]+$/.test(trimmedName)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Team name contains invalid characters" 
-      });
-    }
-
-    const nameCheck = await client.query(
-      `SELECT 1 FROM teams 
-       WHERE event_id = $1 AND LOWER(team_name) = LOWER($2) 
-       FOR UPDATE`,
-      [eventId, trimmedName]
-    );
-    
-    if ((nameCheck.rowCount ?? 0) > 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Team name already exists. Please choose a different name." 
-      });
-    }
-    
-    finalTeamName = trimmedName;
-  } else {
-    finalTeamName = await generateUniqueTeamName(client, eventId, userName);
-  }
-
-  const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id)
-     VALUES ($1, $2) RETURNING registration_id, timestamp`,
-    [userId, eventId]
-  );
-  
-  const registrationId = regResult.rows[0].registration_id;
-  const timestamp = regResult.rows[0].timestamp;
-
-  const teamResult = await client.query(
-    `INSERT INTO teams (team_name, team_lead_id, event_id, team_code)
-     VALUES ($1, $2, $3, NULL) RETURNING team_id, team_code`,
-    [finalTeamName, userId, eventId]
-  );
-  
-  const teamId = teamResult.rows[0].team_id;
-  const teamCode = teamResult.rows[0].team_code;
-
-  await client.query(
-    `INSERT INTO team_registrations (registration_id, team_id) 
-     VALUES ($1, $2)`,
-    [registrationId, teamId]
-  );
-
-  await client.query("COMMIT");
-  
-  return res.status(201).json({
-    success: true,
-    message: "Successfully registered and team created",
-    data: {
-      registrationId,
-      eventName: event.event_name,
-      eventType: "team",
-      teamName: finalTeamName,
-      teamId,
-      teamCode,
-      isTeamLead: true,
-      currentMembers: 1,
-      maxMembers: event.max_team_size,
-      minMembers: event.min_team_size,
-      canInviteMembers: true,
-      feeAmount: event.fee_amount,
-      paymentRequired: parseFloat(event.fee_amount) > 0,
-      timestamp: timestamp
-    }
-  });
-}
-
-// Generate unique team name for auto-assignment
-async function generateUniqueTeamName(client: any, eventId: string, baseName: string): Promise<string> {
-  const result = await client.query(`
-    WITH existing_names AS (
-      SELECT team_name
-      FROM teams 
-      WHERE event_id = $1 
-        AND (LOWER(team_name) = LOWER($2) 
-             OR LOWER(team_name) ~ ('^' || LOWER($2) || ' \\([0-9]+\\)$'))
-      FOR UPDATE
-    ),
-    max_suffix AS (
-      SELECT COALESCE(
-        MAX(
-          CASE 
-            WHEN team_name ~ (LOWER($2) || ' \\(([0-9]+)\\)$')
-            THEN (regexp_match(team_name, '\\(([0-9]+)\\)$'))[1]::int
-            ELSE 0
-          END
-        ), 0
-      ) as max_num
-      FROM existing_names
-    )
-    SELECT 
-      CASE 
-        WHEN max_num = 0 AND NOT EXISTS (
-          SELECT 1 FROM existing_names WHERE LOWER(team_name) = LOWER($2)
-        ) THEN $2
-        ELSE $2 || ' (' || (max_num + 1) || ')'
-      END as unique_name
-    FROM max_suffix
-  `, [eventId, baseName]);
-
-  return result.rows[0].unique_name;
-}
-
-// JoinTeam function 
 export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   const client = await pool.connect();
   
@@ -429,19 +179,7 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const existingReg = await client.query(
-      `SELECT registration_id FROM registrations 
-       WHERE student_id = $1 AND event_id = $2 FOR UPDATE`,
-      [userId, team.event_id]
-    );
-    
-    if ((existingReg.rowCount ?? 0) > 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "You are already registered for this event" 
-      });
-    }
+    await checkExistingRegistration(client, userId, team.event_id);
 
     if (team.team_lead_id === userId) {
       await client.query("ROLLBACK");
@@ -547,6 +285,13 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
         message: "Join team conflict occurred. Please try again." 
       });
     }
+
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+    }
     
     return res.status(500).json({
       success: false,
@@ -558,7 +303,6 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
-// Get user's registration status for an event
 export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.user_id;
