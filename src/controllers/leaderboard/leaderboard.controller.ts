@@ -31,9 +31,10 @@ async function getStats(username: string) {
 
   return {
     username,
-    totalSolved: stats.reduce((acc: number, cur: any) => acc + cur.count, 0),
+    totalSolved: stats.find((s: any) => s.difficulty === "All")?.count || 0,
   };
 }
+
 
 export const getLeaderboard = async (req: Request, res: Response) => {
   try {
@@ -51,8 +52,8 @@ export const getLeaderboard = async (req: Request, res: Response) => {
     );
 
     stats.sort((a, b) => b.totalSolved - a.totalSolved);
-    const topStats = stats.slice(0, 15);
-    const leaderboard = topStats.map((u, i) => ({
+
+    const leaderboard = stats.map((u, i) => ({
       rank: i + 1,
       name: u.dbName, 
       points: u.totalSolved,
