@@ -10,16 +10,10 @@ import {
 export const getHome = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.user_id;
-    if (!userId)
+    const userName = req.user?.name;  
+    if (!userId) {
       return res.status(400).json({ message: "User ID missing from token" });
-
-    const userResult = await pool.query(
-      `SELECT name FROM users WHERE user_id = $1`,
-      [userId]
-    );
-    if (userResult.rowCount === 0)
-      return res.status(404).json({ message: "User not found" });
-    const userName = userResult.rows[0].name;
+    }
 
     const { rows } = await pool.query(
       `SELECT e.event_id, e.event_name, e.event_description, e.event_image, e.venue,
@@ -34,11 +28,10 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
     );
 
     const events = [];
-
     for (const event of rows) {
       const start = new Date(event.event_start_time);
       const end = new Date(event.event_end_time);
-
+      
       const eventData: any = {
         id: event.event_id,
         name: event.event_name,
@@ -58,37 +51,53 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
         certificate: event.certificate || null,
       };
 
-      if (event.min_team_size > 1) {
+      if (event.max_team_size > 1) {
         const teamInfo = await pool.query(
-          `
-          SELECT t.team_code, u.user_id, u.name
-          FROM team_registrations tr
-          JOIN teams t ON tr.team_id = t.team_id
-          JOIN registrations r2 ON tr.registration_id = r2.registration_id
-          JOIN users u ON r2.student_id = u.user_id
-          WHERE t.team_id = (
-            SELECT team_id
-            FROM team_registrations
-            WHERE registration_id = $1
-            LIMIT 1
-          )
-          `,
+          `SELECT t.team_id, t.team_name, t.team_code, t.team_lead_id,
+                  lead.name as team_lead_name,
+                  u.user_id, u.name
+           FROM team_registrations tr
+           JOIN teams t ON tr.team_id = t.team_id
+           LEFT JOIN users lead ON t.team_lead_id = lead.user_id
+           JOIN registrations r2 ON tr.registration_id = r2.registration_id
+           JOIN users u ON r2.student_id = u.user_id
+           WHERE t.team_id = (
+             SELECT team_id
+             FROM team_registrations
+             WHERE registration_id = $1
+             LIMIT 1
+           )
+           ORDER BY CASE WHEN t.team_lead_id = u.user_id THEN 0 ELSE 1 END`,
           [event.registration_id]
         );
 
         if ((teamInfo?.rowCount ?? 0) > 0) {
-          const teamCode = teamInfo.rows[0].team_code;
+          const teamData = teamInfo.rows[0];
+          const teamCode = teamData.team_code;
+          const teamName = teamData.team_name;
+          const teamLeadId = teamData.team_lead_id;
+          const teamLeadName = teamData.team_lead_name;
 
           const members = teamInfo.rows
-            .filter((m) => m.user_id !== userId)
+            .filter((m) => m.user_id !== teamLeadId)
             .map((m) => ({
               id: m.user_id,
               name: m.name,
             }));
 
+          eventData.teamId = teamData.team_id;
+          eventData.teamName = teamName;
           eventData.teamCode = teamCode;
+          eventData.teamLead = {
+            id: teamLeadId,
+            name: teamLeadName
+          };
           eventData.teamMembers = members;
+          eventData.isTeamLead = teamLeadId === userId;
+          eventData.currentMembers = teamInfo.rows.length;
         }
+      } else {
+        eventData.eventType = "solo";
       }
 
       events.push(eventData);
