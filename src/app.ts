@@ -6,7 +6,6 @@ import cookieParser from "cookie-parser";
 const allowedOrigins = ["http://localhost:5173", "https://csitkmce.vercel.app"];
 
 const app = express();
-app.use(cookieParser());
 
 app.use((req, res, next) => {
   if (req.headers.origin && allowedOrigins.includes(req.headers.origin)) {
@@ -18,7 +17,7 @@ app.use((req, res, next) => {
     );
     res.setHeader(
       "Access-Control-Allow-Headers",
-      ["Content-Type", "Authorization"].join(",")
+      ["Content-Type", "Authorization", "Set-Cookie"].join(",")
     );
   }
   if (req.method === "OPTIONS") {
@@ -28,6 +27,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(cookieParser());
 app.use(express.json());
 app.use("/api/", indexRoutes);
 
