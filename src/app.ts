@@ -9,7 +9,7 @@ const app = express();
 
 app.use((req, res, next) => {
   if (req.headers.origin && allowedOrigins.includes(req.headers.origin)) {
-    res.setHeader("Access-Control-Allow-Origin", allowedOrigins.join(","));
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader(
       "Access-Control-Allow-Methods",
