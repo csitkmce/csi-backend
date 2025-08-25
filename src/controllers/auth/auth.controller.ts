@@ -45,13 +45,17 @@ export const registerUser = async (req: Request, res: Response) => {
 };
 
 export const refreshToken = (req: Request, res: Response) => {
-  const { refreshToken } = req.body;
+  const refreshToken = req.headers['x-refresh-token'] as string;
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token missing' });
+  }
   try {
     const payload = verifyRefreshToken(refreshToken) as any;
     const tokens = generateTokens({ user_id: payload.user_id });
-    res.json({ ...tokens });
+
+    return res.json(tokens);
   } catch (err) {
-    res.status(401).json({ error: 'Invalid refresh token' });
+    return res.status(401).json({ error: 'Invalid refresh token' });
   }
 };
 
