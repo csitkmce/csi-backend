@@ -45,15 +45,25 @@ export const registerUser = async (req: Request, res: Response) => {
 };
 
 export const refreshToken = (req: Request, res: Response) => {
-  const refreshToken = req.headers['x-refresh-token'] as string;
+  const refreshToken = req.cookies?.refreshToken; 
+
   if (!refreshToken) {
     return res.status(401).json({ error: 'Refresh token missing' });
   }
+
   try {
     const payload = verifyRefreshToken(refreshToken) as any;
     const tokens = generateTokens({ user_id: payload.user_id });
 
-    return res.json(tokens);
+    res.cookie("refreshToken", tokens.refreshToken, {
+      httpOnly: true,   
+      secure: true,     
+      sameSite: "strict", 
+      path: "/refresh", 
+      maxAge: 7 * 24 * 60 * 60 * 1000 
+    });
+
+    return res.json({ accessToken: tokens.accessToken });
   } catch (err) {
     return res.status(401).json({ error: 'Invalid refresh token' });
   }
