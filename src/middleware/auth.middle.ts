@@ -1,6 +1,6 @@
 import { type Request, type Response, type NextFunction } from 'express';
-import { verifyAccessToken, verifyRefreshToken, generateTokens } from '../utils/jwt.js';
-import {pool} from '../config/db.js'; 
+import { verifyAccessToken } from '../utils/jwt.js';
+import { pool } from '../config/db.js'; 
 
 export interface AuthenticatedRequest extends Request {
   user?: any;
@@ -8,7 +8,6 @@ export interface AuthenticatedRequest extends Request {
 
 export const authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
-  const refreshToken = req.headers['x-refresh-token'] as string;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ 
@@ -28,33 +27,14 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
     });
   }
 
-  let payload = await verifyAccessToken(accessToken);
+  const payload = await verifyAccessToken(accessToken);
 
   if (!payload) {
-    if (!refreshToken) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Access token expired and no refresh token provided',
-        requiresLogin: true
-      });
-    }
-
-    const refreshTokenPayload = await verifyRefreshToken(refreshToken) as any;
-
-    if (!refreshTokenPayload) {
-      return res.status(401).json({ 
-        success: false,
-        message: 'Both access and refresh tokens are invalid',
-        requiresLogin: true
-      });
-    }
-
-    const newTokens = generateTokens({ user_id: refreshTokenPayload.user_id });
-
-    payload = refreshTokenPayload;
-
-    res.setHeader('x-new-access-token', newTokens.accessToken);
-    res.setHeader('x-new-refresh-token', newTokens.refreshToken);
+    return res.status(401).json({ 
+      success: false,
+      message: 'Invalid or expired access token',
+      requiresLogin: true
+    });
   }
 
   try {

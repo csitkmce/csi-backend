@@ -111,3 +111,19 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 export default getHome;
+
+
+export const getUser = async (req: AuthenticatedRequest, res: Response) => {
+     try {
+    const userId = req.user?.user_id;
+    const userName = req.user?.name;
+    const userEmail = req.user?.email;  
+    if (!userId) {
+      return res.status(400).json({ message: "User ID missing from token" });
+    } 
+    return res.json({ userId, userName, userEmail });
+  } catch (err) {
+    console.error("Error in getUser:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}

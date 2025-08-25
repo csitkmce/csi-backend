@@ -1,4 +1,3 @@
-// src/routes/execom/execom.routes.ts
 import { Router } from 'express';
 import { getExecom, getYears, getExecomByYear } from '../../controllers/execom/execom.controller.js';
 const router = Router();

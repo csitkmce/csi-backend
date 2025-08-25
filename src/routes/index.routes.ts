@@ -1,5 +1,5 @@
 import { Router } from "express";
-import getHome from "../controllers/index.controllers.js";
+import {getHome,getUser} from "../controllers/index.controllers.js";
 import authRoutes from "./auth/auth.routes.js";
 import deptRoutes from "./dept/dept.route.js";
 import execomRoutes from './execom/execom.routes.js';
@@ -19,5 +19,6 @@ router.use('/events', eventRoutes);
 router.use('/register', registrationRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/leaderboard', leaderboardRoutes);
+router.get('/user',authenticate,getUser);
 
 export default router;
