@@ -1,6 +1,7 @@
 import { type Request, type Response } from "express";
 import { pool } from "../../config/db.js";
 import { formatDate, formatTime, calculateDayDiff } from "../../utils/dateUtils.js";
+import type { AuthenticatedRequest } from "../../middleware/auth.middle.js";
 
 
 export const getEvents = async (req: Request, res: Response) => {
@@ -88,5 +89,49 @@ export const getEvents = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Error fetching events:", error.message);
     res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const getEventDetails = async (req: AuthenticatedRequest, res: Response) => {
+  const eventId = req.params.eventId;
+
+  try {
+    const { rows: eventRows } = await pool.query(
+      `SELECT event_id, event_name, event_description, event_image
+       FROM events
+       WHERE event_id = $1 AND status = 'active'`,
+      [eventId]
+    );
+
+    if (eventRows.length === 0) {
+      return res.status(404).json({ error: "Event not found or inactive" });
+    }
+
+    const event = eventRows[0];
+
+    const userId = req.user?.user_id;
+    const { rows: userRows } = await pool.query(
+      `
+      SELECT u.name, u.email, d.department_name AS department, u.batch, u.year
+      FROM users u
+      LEFT JOIN departments d ON u.department_id = d.department_id
+      WHERE u.user_id = $1
+      `,
+      [userId]
+    );
+
+    const userInfo = userRows[0] || null;
+
+    return res.json({
+      event: {
+        name: event.event_name,
+        description: event.event_description,
+        image: event.event_image,
+      },
+      user: userInfo,
+    });
+  } catch (error: any) {
+    console.error("Error fetching event details:", error.message);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
