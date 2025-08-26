@@ -3,9 +3,7 @@ import { pool } from "../config/db.js";
 
 export async function initDB() {
   try {
-    // Set timezone to IST for this session
-    await pool.query(`SET timezone TO 'Asia/Kolkata';`);
-
+   
     await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
 
     // ENUMs
@@ -372,34 +370,18 @@ export async function initDB() {
       WHERE max_team_size = 1 AND team_name_required = true;
     `);
 
-    // Set the database default timezone to IST (this affects the entire database)
-    try {
-      await pool.query(
-        `ALTER DATABASE ${
-          process.env.DB_NAME || "your_db_name"
-        } SET timezone TO 'Asia/Kolkata';`
-      );
-    } catch (error) {
-      console.log(
-        "Note: Could not set database timezone. You may need to run this manually with superuser privileges:"
-      );
-      console.log(
-        `ALTER DATABASE your_database_name SET timezone TO 'Asia/Kolkata';`
-      );
-    }
-
     console.log(
       "Tables, constraints, triggers, and indexes created/checked successfully"
     );
-    console.log("Database timezone configured for IST (Asia/Kolkata)");
 
-    // Show current timezone to verify
+    // Show current timezone 
     const timezoneResult = await pool.query(`SHOW timezone;`);
     console.log("Current session timezone:", timezoneResult.rows[0].TimeZone);
 
     // Show current IST time
     const timeResult = await pool.query(`SELECT NOW() as current_ist_time;`);
     console.log("Current IST time:", timeResult.rows[0].current_ist_time);
+    
   } catch (err) {
     console.error("Error initializing database:", err);
     throw err;
