@@ -26,7 +26,7 @@ export const loginUser = async (req: Request, res: Response) => {
       httpOnly: true,     
       secure: true,       
       sameSite: "strict", 
-      path: "/refresh",  
+      path: "/api/auth/refresh",  
       maxAge: 7 * 24 * 60 * 60 * 1000 
     });
 
@@ -71,7 +71,7 @@ export const registerUser = async (req: Request, res: Response) => {
       httpOnly: true,      
       secure: true,        
       sameSite: "strict",  
-      path: "/refresh",    
+      path: "/api/auth/refresh",    
       maxAge: 7 * 24 * 60 * 60 * 1000 
     });
 
@@ -89,21 +89,21 @@ export const registerUser = async (req: Request, res: Response) => {
 };
 
 export const refreshToken = (req: Request, res: Response) => {
-  const refreshToken = req.cookies?.refreshToken; 
+  const storedRefreshToken = req.cookies?.refreshToken; 
 
-  if (!refreshToken) {
+  if (!storedRefreshToken) {
     return res.status(401).json({ error: 'Refresh token missing' });
   }
 
   try {
-    const payload = verifyRefreshToken(refreshToken) as any;
+    const payload = verifyRefreshToken(storedRefreshToken) as any;
     const tokens = generateTokens({ user_id: payload.user_id });
 
     res.cookie("refreshToken", tokens.refreshToken, {
       httpOnly: true,   
       secure: true,     
       sameSite: "strict", 
-      path: "/refresh", 
+      path: "/api/auth/api/auth/refresh", 
       maxAge: 7 * 24 * 60 * 60 * 1000 
     });
 
@@ -113,6 +113,12 @@ export const refreshToken = (req: Request, res: Response) => {
   }
 };
 
-export const logoutUser = async (req: Request, res: Response) => {
-  res.json({ message: 'Logged out successfully' });
+export const logoutUser = (req: Request, res: Response) => {
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    path: "/api/auth/refresh"
+  });
+  return res.json({ message: "Logged out successfully" });
 };
