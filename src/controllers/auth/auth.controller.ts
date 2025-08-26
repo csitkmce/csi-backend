@@ -8,7 +8,7 @@ const cookieOptions: CookieOptions = {
   httpOnly: true,
   secure: isProduction,
   sameSite:"lax", 
-  path: "/api/auth",
+  path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000
 };
 
