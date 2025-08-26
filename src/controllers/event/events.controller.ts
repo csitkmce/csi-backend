@@ -1,28 +1,57 @@
 import { type Request, type Response } from "express";
 import { pool } from "../../config/db.js";
-import { formatDate, formatTime, calculateDayDiff } from "../../utils/dateUtils.js";
+import {
+  formatDate,
+  formatTime,
+  calculateDayDiff,
+} from "../../utils/dateUtils.js";
 import type { AuthenticatedRequest } from "../../middleware/auth.middle.js";
-
+import { verifyAccessToken } from "../../utils/jwt.js";
 
 export const getEvents = async (req: Request, res: Response) => {
   try {
+    const loggedIn = req.query.loggedin === "true";
+    let userId: string | null = null;
+
+    if (loggedIn) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ error: "Authorization header missing" });
+      }
+
+      const parts = authHeader.split(" ");
+      if (parts.length !== 2 || !parts[1]) {
+        return res
+          .status(401)
+          .json({ error: "Malformed authorization header" });
+      }
+
+      const token = parts[1];
+      try {
+        const payload = verifyAccessToken(token) as any;
+        userId = payload.user_id;
+      } catch (err) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+    }
+
     const { rows } = await pool.query(`
-     SELECT 
-      e.*,
-      CASE 
-        WHEN e.max_team_size = 1 THEN (
-          SELECT COUNT(DISTINCT r.registration_id)
-          FROM registrations r
-          WHERE r.event_id = e.event_id
-        )
-        ELSE (
-          SELECT COUNT(DISTINCT t.team_id)
-          FROM teams t
-          WHERE t.event_id = e.event_id
-        )
-      END AS registrations_count
-    FROM events e
-    ORDER BY e.event_start_time ASC;
+      SELECT 
+        e.*,
+        CASE 
+          WHEN e.max_team_size = 1 THEN (
+            SELECT COUNT(DISTINCT r.registration_id)
+            FROM registrations r
+            WHERE r.event_id = e.event_id
+          )
+          ELSE (
+            SELECT COUNT(DISTINCT t.team_id)
+            FROM teams t
+            WHERE t.event_id = e.event_id
+          )
+        END AS registrations_count
+      FROM events e
+      ORDER BY e.event_start_time ASC;
     `);
 
     const now = new Date();
@@ -30,8 +59,28 @@ export const getEvents = async (req: Request, res: Response) => {
     const ongoing: any[] = [];
     const past: any[] = [];
 
-    rows.forEach((event) => {
-      if (event.status !== "active") return;
+    let userRegistrations = new Set<string>();
+
+    if (loggedIn && userId) {
+      const { rows: regRows } = await pool.query(
+        `
+        SELECT event_id
+        FROM registrations
+        WHERE user_id = $1
+        UNION
+        SELECT t.event_id
+        FROM teams t
+        JOIN team_members tm ON t.team_id = tm.team_id
+        WHERE tm.user_id = $1
+        `,
+        [userId]
+      );
+
+      userRegistrations = new Set(regRows.map((r) => r.event_id));
+    }
+
+    for (const event of rows) {
+      if (event.status !== "active") continue;
 
       const start = new Date(event.event_start_time);
       const end = new Date(event.event_end_time);
@@ -43,6 +92,9 @@ export const getEvents = async (req: Request, res: Response) => {
 
       const regOpen = now >= regStart && now <= regEnd;
       const isRegistrationFull = maxRegs > 0 && currentRegs >= maxRegs;
+
+      const registered =
+        loggedIn && userId ? userRegistrations.has(event.event_id) : false;
 
       const durationDays = calculateDayDiff(start, end);
 
@@ -73,17 +125,13 @@ export const getEvents = async (req: Request, res: Response) => {
           min: event.min_team_size,
           max: event.max_team_size,
         },
+        registered,
       };
 
-      // Categorization
-      if (now < start) {
-        upcoming.push(eventData);
-      } else if (now >= start && now <= end) {
-        ongoing.push(eventData);
-      } else {
-        past.push(eventData);
-      }
-    });
+      if (now < start) upcoming.push(eventData);
+      else if (now >= start && now <= end) ongoing.push(eventData);
+      else past.push(eventData);
+    }
 
     res.json({ upcoming, ongoing, past });
   } catch (error: any) {
@@ -92,7 +140,10 @@ export const getEvents = async (req: Request, res: Response) => {
   }
 };
 
-export const getEventDetails = async (req: AuthenticatedRequest, res: Response) => {
+export const getEventDetails = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
   const eventId = req.params.eventId;
 
   try {

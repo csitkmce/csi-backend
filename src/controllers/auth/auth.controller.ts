@@ -1,7 +1,16 @@
-import { type Request, type Response } from 'express';
+import { type CookieOptions, type Request, type Response } from 'express';
 import { pool } from '../../config/db.js'
 import bcrypt from 'bcrypt';
 import { generateTokens, verifyRefreshToken } from '../../utils/jwt.js';
+
+const isProduction = process.env.NODE_ENV === "production";
+const cookieOptions: CookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax", 
+  path: "/api/auth/refresh",
+  maxAge: 7 * 24 * 60 * 60 * 1000
+};
 
 export const loginUser = async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -22,13 +31,7 @@ export const loginUser = async (req: Request, res: Response) => {
 
     const { accessToken, refreshToken } = generateTokens({ user_id: user.user_id });
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,     
-      secure: true,       
-      sameSite: "strict", 
-      path: "/api/auth/refresh",  
-      maxAge: 7 * 24 * 60 * 60 * 1000 
-    });
+    res.cookie("refreshToken", refreshToken, cookieOptions);
 
     return res.json({
       user: {
@@ -67,13 +70,7 @@ export const registerUser = async (req: Request, res: Response) => {
 
     const { accessToken, refreshToken } = generateTokens({ user_id: user.user_id });
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,      
-      secure: true,        
-      sameSite: "strict",  
-      path: "/api/auth/refresh",    
-      maxAge: 7 * 24 * 60 * 60 * 1000 
-    });
+    res.cookie("refreshToken", refreshToken, cookieOptions);
 
     return res.status(201).json({
       user,
@@ -99,13 +96,7 @@ export const refreshToken = (req: Request, res: Response) => {
     const payload = verifyRefreshToken(storedRefreshToken) as any;
     const tokens = generateTokens({ user_id: payload.user_id });
 
-    res.cookie("refreshToken", tokens.refreshToken, {
-      httpOnly: true,   
-      secure: true,     
-      sameSite: "strict", 
-      path: "/api/auth/api/auth/refresh", 
-      maxAge: 7 * 24 * 60 * 60 * 1000 
-    });
+    res.cookie("refreshToken", tokens.refreshToken, cookieOptions);
 
     return res.json({ accessToken: tokens.accessToken });
   } catch (err) {
@@ -114,11 +105,6 @@ export const refreshToken = (req: Request, res: Response) => {
 };
 
 export const logoutUser = (req: Request, res: Response) => {
-  res.clearCookie("refreshToken", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/api/auth/refresh"
-  });
+  res.clearCookie("refreshToken", cookieOptions);
   return res.json({ message: "Logged out successfully" });
 };
