@@ -9,84 +9,71 @@ import {
 } from "../../services/registration.service.js";
 
 export const registerForEvent = async (req: AuthenticatedRequest, res: Response) => {
-  const client = await pool.connect();
+  console.log("✅ registerForEvent called", { user: req.user, body: req.body });
 
+  const client = await pool.connect();
   try {
     const userId = req.user?.user_id;
     const userName = req.user?.name;
     const { eventId, teamName } = req.body;
 
-    // Basic validation
+    console.log("Step 1: Validating input");
     if (!userId || !eventId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "User ID and Event ID are required" 
-      });
+      console.log("❌ Missing userId or eventId");
+      return res.status(400).json({ success: false, message: "User ID and Event ID are required" });
     }
-
     if (!userName || userName.trim() === "") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "User name is required" 
-      });
+      console.log("❌ Missing userName");
+      return res.status(400).json({ success: false, message: "User name is required" });
     }
 
+    console.log("Step 2: Starting transaction");
     await client.query("BEGIN");
     await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
+    console.log("Step 3: Validating event access");
     const event = await validateEventAccess(client, eventId);
-    
+    console.log("✅ Event validated", event);
+
+    console.log("Step 4: Checking existing registration");
     await checkExistingRegistration(client, userId, eventId);
+    console.log("✅ No existing registration found");
 
     if (event.max_registrations) {
       const isTeamEvent = event.max_team_size > 1;
+      console.log(`Step 5: Counting current registrations for event ${eventId}`);
       const currentCount = await getCurrentRegistrationCount(client, eventId, isTeamEvent);
-      
+      console.log("Current registration count:", currentCount);
+
       if (currentCount >= event.max_registrations) {
+        console.log("❌ Event registration is full");
         await client.query("ROLLBACK");
-        return res.status(400).json({ 
-          success: false, 
-          message: "Event registration is full" 
-        });
+        return res.status(400).json({ success: false, message: "Event registration is full" });
       }
     }
 
-    const result = await handleRegistrationFlow(
-      client, 
-      userId, 
-      userName.trim(), 
-      eventId, 
-      event, 
-      teamName
-    );
+    console.log("Step 6: Handling registration flow");
+    const result = await handleRegistrationFlow(client, userId, userName.trim(), eventId, event, teamName);
+    console.log("✅ Registration flow completed", result);
 
     await client.query("COMMIT");
+    console.log("✅ Transaction committed");
     return res.status(201).json(result);
 
   } catch (error: any) {
     await client.query("ROLLBACK");
-    console.error("Registration error:", error);
+    console.error("❌ Registration error:", error);
 
     if (error.code === "40001") {
-      return res.status(409).json({ 
-        success: false, 
-        message: "Registration conflict. Please try again.",
-        retryable: true 
-      });
+      return res.status(409).json({ success: false, message: "Registration conflict. Please try again.", retryable: true });
     }
 
     if (error.code === "23505") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Registration conflict occurred. Please try again." 
-      });
+      return res.status(400).json({ success: false, message: "Registration conflict occurred. Please try again." });
     }
 
     if (error.statusCode) {
-      return res.status(error.statusCode).json({
-        success: false,
-        message: error.message
-      });
+      return res.status(error.statusCode).json({ success: false, message: error.message });
     }
 
     return res.status(500).json({
@@ -96,6 +83,7 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
     });
   } finally {
     client.release();
+    console.log("Step 7: Client released");
   }
 };
 

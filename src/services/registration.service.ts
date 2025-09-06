@@ -74,26 +74,28 @@ export async function checkExistingRegistration(client: any, userId: string, eve
     throw error;
   }
 }
-
 export async function getCurrentRegistrationCount(client: any, eventId: string, isTeamEvent: boolean): Promise<number> {
   let countQuery: string;
-  
+
   if (isTeamEvent) {
-    countQuery = `SELECT COUNT(DISTINCT t.team_id) as count
-                 FROM team_registrations tr
-                 JOIN teams t ON tr.team_id = t.team_id
-                 WHERE t.event_id = $1
-                 FOR UPDATE OF t`;
+    countQuery = `
+      SELECT COUNT(DISTINCT t.team_id) as count
+      FROM team_registrations tr
+      JOIN teams t ON tr.team_id = t.team_id
+      WHERE t.event_id = $1
+    `;
   } else {
-    countQuery = `SELECT COUNT(*) as count 
-                 FROM registrations r
-                 WHERE r.event_id = $1
-                 FOR UPDATE OF r`;
+    countQuery = `
+      SELECT COUNT(*) as count
+      FROM registrations r
+      WHERE r.event_id = $1
+    `;
   }
 
   const countResult = await client.query(countQuery, [eventId]);
   return parseInt(countResult.rows[0].count);
 }
+
 
 export async function handleRegistrationFlow(
   client: any,
@@ -164,42 +166,26 @@ async function handleTeamEventRegistration(
 ): Promise<any> {
   let finalTeamName: string;
 
-  if (event.team_name_required) {
-    if (!teamName || teamName.trim() === "") {
-      const error: CustomError = new Error("Team name is required for this event");
-      error.statusCode = 400;
-      throw error;
-    }
-    
-    const trimmedName = teamName.trim();
-    
-    if (trimmedName.length < 1 || trimmedName.length > 100) {
-      const error: CustomError = new Error("Team name must be between 1 and 100 characters");
-      error.statusCode = 400;
-      throw error;
-    }
+  // Use frontend-provided name if given
+  if (teamName && teamName.trim() !== "") {
+    finalTeamName = teamName.trim();
 
-    if (!/^[\w\s\-_()]+$/.test(trimmedName)) {
-      const error: CustomError = new Error("Team name contains invalid characters");
-      error.statusCode = 400;
-      throw error;
-    }
-
+    // Optional: check for duplicates
     const nameCheck = await client.query(
       `SELECT 1 FROM teams 
        WHERE event_id = $1 AND LOWER(team_name) = LOWER($2) 
        FOR UPDATE`,
-      [eventId, trimmedName]
+      [eventId, finalTeamName]
     );
-    
+
     if ((nameCheck.rowCount ?? 0) > 0) {
       const error: CustomError = new Error("Team name already exists. Please choose a different name.");
       error.statusCode = 400;
       throw error;
     }
-    
-    finalTeamName = trimmedName;
+
   } else {
+    // Generate unique name if no name provided
     finalTeamName = await generateUniqueTeamName(client, eventId, userName);
   }
 
@@ -209,17 +195,20 @@ async function handleTeamEventRegistration(
      VALUES ($1, $2) RETURNING registration_id, timestamp`,
     [userId, eventId]
   );
-  
+
   const registrationId = regResult.rows[0].registration_id;
   const timestamp = regResult.rows[0].timestamp;
 
-  // Create team
+  // Generate a team code
+  const teamCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+  // Insert team with finalTeamName
   const teamResult = await client.query(
     `INSERT INTO teams (team_name, team_lead_id, event_id, team_code)
-     VALUES ($1, $2, $3, NULL) RETURNING team_id, team_code`,
-    [finalTeamName, userId, eventId]
+     VALUES ($1, $2, $3, $4) RETURNING team_id, team_code`,
+    [finalTeamName, userId, eventId, teamCodeGenerated]
   );
-  
+
   const teamId = teamResult.rows[0].team_id;
   const teamCode = teamResult.rows[0].team_code;
 
@@ -254,23 +243,22 @@ async function handleTeamEventRegistration(
   };
 }
 
+
 // Generate unique team name for auto-assignment
 async function generateUniqueTeamName(client: any, eventId: string, baseName: string): Promise<string> {
   const result = await client.query(`
     WITH existing_names AS (
       SELECT team_name
-      FROM teams 
-      WHERE event_id = $1 
-        AND (LOWER(team_name) = LOWER($2) 
-             OR LOWER(team_name) ~ ('^' || LOWER($2) || ' \\([0-9]+\\)))
-      FOR UPDATE
+      FROM teams
+      WHERE event_id = $1
+        AND (LOWER(team_name) = LOWER($2) OR LOWER(team_name) ~ ('^' || LOWER($2) || ' (\\\\([0-9]+\\\\))'))
     ),
     max_suffix AS (
       SELECT COALESCE(
         MAX(
-          CASE 
-            WHEN team_name ~ (LOWER($2) || ' \\(([0-9]+)\\))
-            THEN (regexp_match(team_name, '\\(([0-9]+)\\)))[1]::int
+          CASE
+            WHEN team_name ~ ('^' || LOWER($2) || ' (\\\\([0-9]+\\\\))')
+            THEN (regexp_match(team_name, '\\\\(([0-9]+)\\\\)'))[1]::int
             ELSE 0
           END
         ), 0
@@ -278,13 +266,13 @@ async function generateUniqueTeamName(client: any, eventId: string, baseName: st
       FROM existing_names
     )
     SELECT 
-      CASE 
-        WHEN max_num = 0 AND NOT EXISTS (
-          SELECT 1 FROM existing_names WHERE LOWER(team_name) = LOWER($2)
-        ) THEN $2
+      CASE
+        WHEN max_num = 0 AND NOT EXISTS (SELECT 1 FROM existing_names WHERE LOWER(team_name) = LOWER($2))
+        THEN $2
         ELSE $2 || ' (' || (max_num + 1) || ')'
       END as unique_name
     FROM max_suffix
+    FOR UPDATE
   `, [eventId, baseName]);
 
   return result.rows[0].unique_name;

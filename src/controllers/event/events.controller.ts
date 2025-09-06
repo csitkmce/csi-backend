@@ -139,12 +139,21 @@ export const getEvents = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
 export const getEventDetails = async (
   req: AuthenticatedRequest,
   res: Response
 ) => {
+  console.log('--- getEventDetails called ---');
+  console.log('req.params:', req.params);
+  console.log('req.user:', req.user);
+
   const eventId = req.params.eventId;
+  console.log('eventId from params:', eventId);
+
+  if (!eventId) {
+    console.error('No eventId provided in URL params!');
+    return res.status(400).json({ error: 'Event ID is required' });
+  }
 
   try {
     const { rows: eventRows } = await pool.query(
@@ -154,13 +163,18 @@ export const getEventDetails = async (
       [eventId]
     );
 
+    console.log('eventRows:', eventRows);
+
     if (eventRows.length === 0) {
+      console.warn(`Event not found or inactive for ID: ${eventId}`);
       return res.status(404).json({ error: "Event not found or inactive" });
     }
 
     const event = eventRows[0];
 
     const userId = req.user?.user_id;
+    console.log('userId from auth middleware:', userId);
+
     const { rows: userRows } = await pool.query(
       `
       SELECT u.name, u.email, d.department_name AS department, u.batch, u.year
@@ -170,6 +184,8 @@ export const getEventDetails = async (
       `,
       [userId]
     );
+
+    console.log('userRows:', userRows);
 
     const userInfo = userRows[0] || null;
 
@@ -182,7 +198,7 @@ export const getEventDetails = async (
       user: userInfo,
     });
   } catch (error: any) {
-    console.error("Error fetching event details:", error.message);
+    console.error("Error fetching event details:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };

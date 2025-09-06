@@ -5,7 +5,7 @@ import cookieParser from "cookie-parser";
 
 const app = express();
 
-const allowedOrigins = ["http://localhost:5173", "https://csitkmce.vercel.app"];
+const allowedOrigins = ["http://localhost:3000","http://localhost:5173", "https://csitkmce.vercel.app"];
 const corsOptions = {
   origin: function (
     origin: string | undefined,
