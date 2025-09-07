@@ -177,13 +177,14 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const memberCountResult = await client.query(
-      `SELECT COUNT(*) as count 
-       FROM team_registrations tr
-       JOIN registrations r ON tr.registration_id = r.registration_id
-       WHERE tr.team_id = $1 FOR UPDATE OF r`,
-      [team.team_id]
-    );
+const memberCountResult = await client.query(
+  `SELECT COUNT(*) as count 
+   FROM team_registrations tr
+   JOIN registrations r ON tr.registration_id = r.registration_id
+   WHERE tr.team_id = $1`,
+  [team.team_id]
+);
+
     
     const currentMembers = parseInt(memberCountResult.rows[0].count);
     
@@ -210,16 +211,17 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
       [registrationId, team.team_id]
     );
 
-    const teamMembersResult = await client.query(
-      `SELECT u.user_id, u.name
-       FROM team_registrations tr
-       JOIN registrations r ON tr.registration_id = r.registration_id
-       JOIN users u ON r.student_id = u.user_id
-       JOIN teams t ON tr.team_id = t.team_id
-       WHERE tr.team_id = $1 AND t.team_lead_id != u.user_id
-       ORDER BY tr.joined_at`,
-      [team.team_id]
-    );
+const teamMembersResult = await client.query(
+  `SELECT u.user_id, u.name
+   FROM team_registrations tr
+   JOIN registrations r ON tr.registration_id = r.registration_id
+   JOIN users u ON r.student_id = u.user_id
+   JOIN teams t ON tr.team_id = t.team_id
+   WHERE tr.team_id = $1 AND t.team_lead_id != u.user_id
+   ORDER BY r.timestamp`,
+  [team.team_id]
+);
+
 
     const teamMembers = teamMembersResult.rows.map((member) => ({
       id: member.user_id,
@@ -412,17 +414,18 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
       let teamInfo = null;
       if (isTeamEvent) {
         const teamResult = await client.query(
-          `SELECT t.team_id, t.team_name, t.team_code, t.team_lead_id,
-                  COUNT(tr.registration_id) as current_members,
-                  e.max_team_size, e.min_team_size
-           FROM team_registrations tr_user
-           JOIN teams t ON tr_user.team_id = t.team_id
-           JOIN events e ON t.event_id = e.event_id
-           LEFT JOIN team_registrations tr ON t.team_id = tr.team_id
-           WHERE tr_user.registration_id = $1
-           GROUP BY t.team_id, t.team_name, t.team_code, t.team_lead_id, e.max_team_size, e.min_team_size`,
-          [registration.registration_id]
-        );
+  `SELECT t.team_id, t.team_name, t.team_code, t.team_lead_id,
+          COUNT(tr.registration_id) as current_members,
+          e.max_team_size, e.min_team_size
+   FROM team_registrations tr_user
+   JOIN teams t ON tr_user.team_id = t.team_id
+   JOIN events e ON t.event_id = e.event_id
+   LEFT JOIN team_registrations tr ON t.team_id = tr.team_id
+   WHERE tr_user.registration_id = $1
+   GROUP BY t.team_id, t.team_name, t.team_code, t.team_lead_id, e.max_team_size, e.min_team_size`
+  ,[registration.registration_id]
+);
+
 
         if ((teamResult.rowCount ?? 0) > 0) {
           const team = teamResult.rows[0];
