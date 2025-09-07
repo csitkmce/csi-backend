@@ -291,6 +291,87 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
+export const getTeamByCode = async (req: AuthenticatedRequest, res: Response) => {
+    console.log("🚀 getTeamByCode triggered!");
+
+  const { teamCode } = req.params;
+
+  if (!teamCode) {
+    return res.status(400).json({
+      success: false,
+      message: "Team code is required"
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    const sanitizedTeamCode = teamCode.trim().toUpperCase();
+
+    const teamResult = await client.query(
+      `SELECT t.team_id, t.team_name, t.team_code, t.team_lead_id,
+              e.event_id, e.event_name, e.max_team_size, e.min_team_size,
+              u.name AS team_lead_name
+       FROM teams t
+       JOIN events e ON t.event_id = e.event_id
+       LEFT JOIN users u ON t.team_lead_id = u.user_id
+       WHERE t.team_code = $1`,
+      [sanitizedTeamCode]
+    );
+    
+
+    if (teamResult.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Team not found"
+      });
+    }
+
+    const team = teamResult.rows[0];
+
+const membersResult = await client.query(
+  `SELECT u.user_id, u.name, u.email, r.timestamp
+   FROM team_registrations tr
+   JOIN registrations r ON tr.registration_id = r.registration_id
+   JOIN users u ON r.student_id = u.user_id
+   WHERE tr.team_id = $1
+   ORDER BY r.timestamp`,
+  [team.team_id]
+);
+console.log("Members query result:", membersResult.rows);
+
+
+
+
+    return res.json({
+      success: true,
+      data: {
+        teamId: team.team_id,
+        teamName: team.team_name,
+        teamCode: team.team_code,
+        eventId: team.event_id,
+        eventName: team.event_name,
+        maxMembers: team.max_team_size,
+        minMembers: team.min_team_size,
+        teamLead: {
+          id: team.team_lead_id,
+          name: team.team_lead_name
+        },
+        members: membersResult.rows
+      }
+    });
+
+  } catch (err: any) {
+    console.error("Get team by code error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch team"
+    });
+  } finally {
+    client.release();
+  }
+};
+
+
 export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.user_id;
