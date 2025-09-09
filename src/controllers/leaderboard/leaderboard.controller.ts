@@ -1,6 +1,7 @@
 import { type Request, type Response } from "express";
 import { pool } from "../../config/db.js";
 import fetch from "node-fetch";
+import type { AuthenticatedRequest } from "../../middleware/auth.middle.js";
 
 let cachedLeaderboard: any[] = [];
 let lastUpdatedTime: number = 0;
@@ -65,26 +66,41 @@ function getTimeAgo(ms: number) {
 
 async function refreshLeaderboardCache() {
   try {
-    const result = await pool.query("SELECT name, username FROM leetcode_users");
-    const users = result.rows;
+    // 1. Join leetcode_users with users to get name + username
+    const result = await pool.query(`
+      SELECT u.name, lu.username
+      FROM leetcode_users lu
+      JOIN users u ON lu.user_id = u.user_id
+    `);
+
+    const users = result.rows; 
+    // [{ name: "Noah John", username: "NJP5" }, ...]
+
+    // 2. Collect usernames
     const usernames = users.map((u) => u.username);
 
+    // 3. Fetch stats from LeetCode API
     const stats = await getBatchStats(usernames);
+    // [{ username: "NJP5", totalSolved: 120 }, ...]
 
+    // 4. Merge DB data + stats
     const merged = users.map((u) => {
       const stat = stats.find((s) => s.username === u.username);
       return {
-        dbName: u.name,
+        dbName: u.name, // take name from users table
         username: u.username,
         totalSolved: stat?.totalSolved || 0,
       };
     });
 
+    // 5. Sort by solved problems
     merged.sort((a, b) => b.totalSolved - a.totalSolved);
 
+    // 6. Format leaderboard
     cachedLeaderboard = merged.map((u, i) => ({
       rank: i + 1,
       name: u.dbName,
+      username: u.username,
       points: u.totalSolved,
     }));
 
@@ -94,6 +110,7 @@ async function refreshLeaderboardCache() {
     console.error("Failed to refresh leaderboard cache:", err);
   }
 }
+
 
 // Initialize background refresh every 30 minutes
 refreshLeaderboardCache(); 
@@ -105,14 +122,14 @@ export const getLeaderboard = async (req: Request, res: Response) => {
       await refreshLeaderboardCache();
     }
 
-    res.status(200).json(cachedLeaderboard.slice(0, 15));
+    // res.status(200).json(cachedLeaderboard.slice(0, 15));
 
-    //const top15 = cachedLeaderboard.slice(0, 15);
+    const top15 = cachedLeaderboard.slice(0, 15);
 
-    // res.status(200).json({
-    //   lastUpdated: getTimeAgo(lastUpdatedTime),
-    //   leaderboard: top15,
-    // });
+    res.status(200).json({
+      lastUpdated: getTimeAgo(lastUpdatedTime),
+      leaderboard: top15,
+    });
   } catch (error) {
     console.error("Leaderboard error:", error);
     return res.status(500).json({
@@ -121,3 +138,37 @@ export const getLeaderboard = async (req: Request, res: Response) => {
     });
   }
 };
+
+export async function registerLeetcode(req: AuthenticatedRequest, res: Response) {
+  const { leetcodeId } = req.body;
+
+  if (!leetcodeId) {
+    return res.status(400).json({ message: "LeetCode ID is required" });
+  }
+
+  if (!req.user) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const { user_id, name } = req.user;
+
+const result = await pool.query(
+  `INSERT INTO leetcode_users (user_id, username)
+   VALUES ($1, $2)
+   ON CONFLICT (user_id) DO UPDATE 
+   SET username = EXCLUDED.username
+   RETURNING *`,
+  [user_id, leetcodeId]
+);
+
+
+    res.status(201).json({
+      message: "LeetCode ID registered successfully",
+      user: result.rows[0],
+    });
+  } catch (err) {
+    console.error("Register LeetCode error:", err);
+    res.status(500).json({ message: "Failed to register LeetCode ID" });
+  }
+}
