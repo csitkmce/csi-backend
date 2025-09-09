@@ -62,3 +62,39 @@ export const authenticate = async (req: AuthenticatedRequest, res: Response, nex
     });
   }
 };
+
+export const optionalAuthenticate = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // No token, just continue
+    return next();
+  }
+
+  const accessToken = authHeader.split(' ')[1];
+  if (!accessToken) return next();
+
+  try {
+    const payload = await verifyAccessToken(accessToken);
+    if (!payload) return next(); // Invalid token, skip
+
+    // Fetch user from DB
+    const userQuery = await pool.query(
+      "SELECT user_id, name, email FROM users WHERE user_id = $1",
+      [payload.user_id]
+    );
+
+    if (userQuery.rowCount === 0) return next(); // User not found
+
+    req.user = userQuery.rows[0]; // Attach user to request
+  } catch (err) {
+    console.warn("Optional auth failed:", err);
+    // Don't block request; just continue without req.user
+  }
+
+  next();
+};

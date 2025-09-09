@@ -115,29 +115,39 @@ async function refreshLeaderboardCache() {
 // Initialize background refresh every 30 minutes
 refreshLeaderboardCache(); 
 setInterval(refreshLeaderboardCache, 30 * 60 * 1000);
-
-export const getLeaderboard = async (req: Request, res: Response) => {
+export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (cachedLeaderboard.length === 0) {
-      await refreshLeaderboardCache();
-    }
-
-    // res.status(200).json(cachedLeaderboard.slice(0, 15));
+    if (cachedLeaderboard.length === 0) await refreshLeaderboardCache();
 
     const top15 = cachedLeaderboard.slice(0, 15);
+
+    let userRegistered: boolean | null = null;
+
+    console.log("req.user:", req.user); // <-- debug logged-in user
+
+    if (req.user) {
+      const check = await pool.query(
+        `SELECT 1 FROM leetcode_users WHERE user_id = $1`,
+        [req.user.user_id]
+      );
+      console.log("DB check rows:", check.rows); // <-- debug DB result
+      userRegistered = check.rows.length > 0;
+    }
+
+    console.log("userRegistered:", userRegistered);
 
     res.status(200).json({
       lastUpdated: getTimeAgo(lastUpdatedTime),
       leaderboard: top15,
+      userRegistered, // null = not logged in
     });
   } catch (error) {
     console.error("Leaderboard error:", error);
-    return res.status(500).json({
-      error: "Failed to fetch leaderboard",
-      details: error instanceof Error ? error.message : String(error),
-    });
+    res.status(500).json({ error: "Failed to fetch leaderboard" });
   }
 };
+
+
 
 export async function registerLeetcode(req: AuthenticatedRequest, res: Response) {
   const { leetcodeId } = req.body;
