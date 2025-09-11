@@ -139,6 +139,7 @@ export const getEvents = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
 export const getEventDetails = async (
   req: AuthenticatedRequest,
   res: Response
@@ -157,7 +158,13 @@ export const getEventDetails = async (
 
   try {
     const { rows: eventRows } = await pool.query(
-      `SELECT event_id, event_name, event_description, event_image
+      `SELECT 
+         event_id, event_name, event_description, event_image,
+         venue, reg_start_time, reg_end_time,
+         event_start_time, event_end_time,
+         fee_amount, food, min_team_size, max_team_size,
+         team_name_required, status, max_registrations,
+         whatsapp_link
        FROM events
        WHERE event_id = $1 AND status = 'active'`,
       [eventId]
@@ -186,15 +193,33 @@ export const getEventDetails = async (
     );
 
     console.log('userRows:', userRows);
-
     const userInfo = userRows[0] || null;
 
-    return res.json({
-      event: {
-        name: event.event_name,
-        description: event.event_description,
-        image: event.event_image,
+    // Build full event object
+    const eventDetails = {
+      id: event.event_id,
+      name: event.event_name,
+      description: event.event_description,
+      image: event.event_image,
+      venue: event.venue,
+      regStart: event.reg_start_time,
+      regEnd: event.reg_end_time,
+      eventStart: event.event_start_time,
+      eventEnd: event.event_end_time,
+      fee: parseFloat(event.fee_amount),
+      food: event.food,
+      team: {
+        min: event.min_team_size,
+        max: event.max_team_size,
       },
+      teamNameRequired: event.team_name_required,
+      status: event.status,
+      maxRegistrations: event.max_registrations,
+      whatsappLink: event.whatsapp_link,
+    };
+
+    return res.json({
+      event: eventDetails,
       user: userInfo,
     });
   } catch (error: any) {

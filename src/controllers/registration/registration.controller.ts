@@ -190,6 +190,7 @@ const memberCountResult = await client.query(
     
     if (currentMembers >= team.max_team_size) {
       await client.query("ROLLBACK");
+      console.log("Team is already full");
       return res.status(400).json({ 
         success: false, 
         message: "Team is already full" 
