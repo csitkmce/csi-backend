@@ -74,6 +74,7 @@ export async function checkExistingRegistration(client: any, userId: string, eve
     throw error;
   }
 }
+
 export async function getCurrentRegistrationCount(client: any, eventId: string, isTeamEvent: boolean): Promise<number> {
   let countQuery: string;
 
@@ -96,20 +97,20 @@ export async function getCurrentRegistrationCount(client: any, eventId: string, 
   return parseInt(countResult.rows[0].count);
 }
 
-
 export async function handleRegistrationFlow(
   client: any,
   userId: string,
   userName: string,
   eventId: string,
   event: Event,
-  teamName?: string
+  teamName?: string,
+  accommodation?: string
 ): Promise<any> {
   const isSoloEvent = event.max_team_size === 1;
   const isTeamEvent = event.max_team_size > 1;
 
   if (isSoloEvent) {
-    return await handleSoloEventRegistration(client, userId, eventId, event);
+    return await handleSoloEventRegistration(client, userId, eventId, event, accommodation);
   }
 
   if (isTeamEvent) {
@@ -119,7 +120,8 @@ export async function handleRegistrationFlow(
       userName, 
       eventId, 
       event, 
-      teamName
+      teamName,
+      accommodation
     );
   }
 
@@ -132,12 +134,13 @@ async function handleSoloEventRegistration(
   client: any, 
   userId: string, 
   eventId: string, 
-  event: Event
+  event: Event,
+  accommodation?: string
 ): Promise<any> {
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id)
-     VALUES ($1, $2) RETURNING registration_id, timestamp`,
-    [userId, eventId]
+    `INSERT INTO registrations (student_id, event_id, accommodation)
+     VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
+    [userId, eventId, accommodation || null]
   );
   
   const feeAmount = parseFloat(event.fee_amount);
@@ -151,7 +154,8 @@ async function handleSoloEventRegistration(
       eventType: "solo",
       feeAmount: event.fee_amount,
       paymentRequired: feeAmount > 0,
-      timestamp: regResult.rows[0].timestamp
+      timestamp: regResult.rows[0].timestamp,
+      accommodation: accommodation || null
     }
   };
 }
@@ -162,7 +166,8 @@ async function handleTeamEventRegistration(
   userName: string,
   eventId: string,
   event: Event,
-  teamName?: string
+  teamName?: string,
+  accommodation?: string
 ): Promise<any> {
   let finalTeamName: string;
 
@@ -189,11 +194,11 @@ async function handleTeamEventRegistration(
     finalTeamName = await generateUniqueTeamName(client, eventId, userName);
   }
 
-  // Create registration
+  // Create registration 
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id)
-     VALUES ($1, $2) RETURNING registration_id, timestamp`,
-    [userId, eventId]
+    `INSERT INTO registrations (student_id, event_id, accommodation)
+     VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
+    [userId, eventId, accommodation || null]
   );
 
   const registrationId = regResult.rows[0].registration_id;
@@ -238,11 +243,11 @@ async function handleTeamEventRegistration(
       canInviteMembers: true,
       feeAmount: event.fee_amount,
       paymentRequired: feeAmount > 0,
-      timestamp: timestamp
+      timestamp: timestamp,
+      accommodation: accommodation || null
     }
   };
 }
-
 
 // Generate unique team name for auto-assignment
 async function generateUniqueTeamName(client: any, eventId: string, baseName: string): Promise<string> {
