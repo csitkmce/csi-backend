@@ -8,6 +8,7 @@ import registrationRoutes from './registration/registration.routes.js';
 import paymentRoutes from './payment/payment.routes.js';
 import { authenticate } from "../middleware/auth.middle.js";
 import leaderboardRoutes from "./leaderboard/leaderboard.routes.js";
+import accommodationRoutes from "./accommodation/accommodation.routes.js";
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use('/register', registrationRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/leaderboard', leaderboardRoutes);
 router.get('/user',authenticate,getUser);
+router.use('/accommodation', accommodationRoutes);
 
 export default router;

@@ -104,13 +104,13 @@ export async function handleRegistrationFlow(
   eventId: string,
   event: Event,
   teamName?: string,
-  accommodation?: string
+  accommodationId?: number
 ): Promise<any> {
   const isSoloEvent = event.max_team_size === 1;
   const isTeamEvent = event.max_team_size > 1;
 
   if (isSoloEvent) {
-    return await handleSoloEventRegistration(client, userId, eventId, event, accommodation);
+    return await handleSoloEventRegistration(client, userId, eventId, event, accommodationId);
   }
 
   if (isTeamEvent) {
@@ -121,7 +121,7 @@ export async function handleRegistrationFlow(
       eventId, 
       event, 
       teamName,
-      accommodation
+      accommodationId
     );
   }
 
@@ -135,15 +135,30 @@ async function handleSoloEventRegistration(
   userId: string, 
   eventId: string, 
   event: Event,
-  accommodation?: string
+  accommodationId?: number
 ): Promise<any> {
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id, accommodation)
+    `INSERT INTO registrations (student_id, event_id, accommodation_id)
      VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
-    [userId, eventId, accommodation || null]
+    [userId, eventId, accommodationId || null]
   );
   
   const feeAmount = parseFloat(event.fee_amount);
+  
+  // Get accommodation details if provided
+  let accommodationData = null;
+  if (accommodationId) {
+    const accommodationResult = await client.query(
+      'SELECT accommodation_id, accommodation FROM accommodations WHERE accommodation_id = $1',
+      [accommodationId]
+    );
+    if (accommodationResult.rowCount && accommodationResult.rowCount > 0) {
+      accommodationData = {
+        id: accommodationResult.rows[0].accommodation_id,
+        name: accommodationResult.rows[0].accommodation
+      };
+    }
+  }
   
   return {
     success: true,
@@ -155,7 +170,7 @@ async function handleSoloEventRegistration(
       feeAmount: event.fee_amount,
       paymentRequired: feeAmount > 0,
       timestamp: regResult.rows[0].timestamp,
-      accommodation: accommodation || null
+      accommodation: accommodationData
     }
   };
 }
@@ -167,7 +182,7 @@ async function handleTeamEventRegistration(
   eventId: string,
   event: Event,
   teamName?: string,
-  accommodation?: string
+  accommodationId?: number
 ): Promise<any> {
   let finalTeamName: string;
 
@@ -196,9 +211,9 @@ async function handleTeamEventRegistration(
 
   // Create registration 
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id, accommodation)
+    `INSERT INTO registrations (student_id, event_id, accommodation_id)
      VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
-    [userId, eventId, accommodation || null]
+    [userId, eventId, accommodationId || null]
   );
 
   const registrationId = regResult.rows[0].registration_id;
@@ -226,6 +241,21 @@ async function handleTeamEventRegistration(
 
   const feeAmount = parseFloat(event.fee_amount);
 
+  // Get accommodation details if provided
+  let accommodationData = null;
+  if (accommodationId) {
+    const accommodationResult = await client.query(
+      'SELECT accommodation_id, accommodation FROM accommodations WHERE accommodation_id = $1',
+      [accommodationId]
+    );
+    if (accommodationResult.rowCount > 0) {
+      accommodationData = {
+        id: accommodationResult.rows[0].accommodation_id,
+        name: accommodationResult.rows[0].accommodation
+      };
+    }
+  }
+
   return {
     success: true,
     message: "Successfully registered and team created",
@@ -244,7 +274,7 @@ async function handleTeamEventRegistration(
       feeAmount: event.fee_amount,
       paymentRequired: feeAmount > 0,
       timestamp: timestamp,
-      accommodation: accommodation || null
+      accommodation: accommodationData
     }
   };
 }

@@ -73,6 +73,13 @@ export async function initDB() {
       );
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS accommodations (
+        accommodation_id SERIAL PRIMARY KEY,
+        accommodation VARCHAR(255) NOT NULL
+      );
+    `);
+
     // Add comment for clarity
     await pool.query(`
       COMMENT ON COLUMN events.team_name_required IS 'Only applicable for team events (max_team_size > 1). Solo events (max_team_size = 1) cannot require team names.';
@@ -194,7 +201,7 @@ export async function initDB() {
         attendance_status attendance_status DEFAULT 'absent',
         payment_status BOOLEAN DEFAULT false,
         non_veg BOOLEAN DEFAULT false,
-        accommodation TEXT,
+        accommodation_id INTEGER REFERENCES accommodations(id) ON DELETE SET NULL,
         UNIQUE(student_id, event_id)
       );
     `);

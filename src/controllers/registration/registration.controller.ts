@@ -15,7 +15,7 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
   try {
     const userId = req.user?.user_id;
     const userName = req.user?.name;
-    const { eventId, teamName, accommodation } = req.body;
+    const { eventId, teamName, accommodationId } = req.body;
 
     console.log("Step 1: Validating input");
     if (!userId || !eventId) {
@@ -25,6 +25,17 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
     if (!userName || userName.trim() === "") {
       console.log("❌ Missing userName");
       return res.status(400).json({ success: false, message: "User name is required" });
+    }
+
+    // Validate accommodation if provided
+    if (accommodationId) {
+      const accommodationCheck = await client.query(
+        'SELECT accommodation_id FROM accommodations WHERE accommodation_id = $1',
+        [accommodationId]
+      );
+      if (accommodationCheck.rowCount === 0) {
+        return res.status(400).json({ success: false, message: "Invalid accommodation selected" });
+      }
     }
 
     console.log("Step 2: Starting transaction");
@@ -60,7 +71,7 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
       eventId, 
       event, 
       teamName,
-      accommodation
+      accommodationId
     );
     console.log("✅ Registration flow completed", result);
 
@@ -100,13 +111,24 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   
   try {
     const userId = req.user?.user_id;
-    const { eventId, teamCode, accommodation } = req.body;
+    const { eventId, teamCode, accommodationId } = req.body;
     
     if (!userId || !teamCode || !eventId) {
       return res.status(400).json({ 
         success: false, 
         message: "User ID, Event ID, and Team Code are required" 
       });
+    }
+
+    // Validate accommodation if provided
+    if (accommodationId) {
+      const accommodationCheck = await client.query(
+        'SELECT accommodation_id FROM accommodations WHERE accommodation_id = $1',
+        [accommodationId]
+      );
+      if (accommodationCheck.rowCount === 0) {
+        return res.status(400).json({ success: false, message: "Invalid accommodation selected" });
+      }
     }
 
     const sanitizedTeamCode = teamCode.trim().toUpperCase();
@@ -206,9 +228,9 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
 
     // Create registration
     const regResult = await client.query(
-      `INSERT INTO registrations (student_id, event_id, accommodation) 
+      `INSERT INTO registrations (student_id, event_id, accommodation_id) 
        VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
-      [userId, team.event_id, accommodation || null]
+      [userId, team.event_id, accommodationId || null]
     );
     
     const registrationId = regResult.rows[0].registration_id;
@@ -236,6 +258,21 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
       name: member.name
     }));
 
+    // Get accommodation details if provided
+    let accommodationData = null;
+    if (accommodationId) {
+      const accommodationResult = await client.query(
+        'SELECT accommodation_id, accommodation FROM accommodations WHERE accommodation_id = $1',
+        [accommodationId]
+      );
+      if (accommodationResult.rowCount && accommodationResult.rowCount > 0) {
+        accommodationData = {
+          id: accommodationResult.rows[0].accommodation_id,
+          name: accommodationResult.rows[0].accommodation
+        };
+      }
+    }
+
     await client.query("COMMIT");
     
     return res.status(201).json({
@@ -262,7 +299,7 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
         feeAmount: team.fee_amount,
         paymentRequired: parseFloat(team.fee_amount) > 0,
         timestamp: timestamp,
-        accommodation: accommodation || null
+        accommodation: accommodationData
       }
     });
 
@@ -396,9 +433,10 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
     try {
       const registrationResult = await client.query(
         `SELECT r.registration_id, r.timestamp, r.payment_status, r.attendance_status,
-                r.accommodation, e.event_name, e.max_team_size, e.fee_amount
+                r.accommodation_id, a.accommodation, e.event_name, e.max_team_size, e.fee_amount
          FROM registrations r
          JOIN events e ON r.event_id = e.event_id
+         LEFT JOIN accommodations a ON r.accommodation_id = a.accommodation_id
          WHERE r.student_id = $1 AND r.event_id = $2`,
         [userId, eventId]
       );
@@ -446,6 +484,11 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
         }
       }
 
+      const accommodationData = registration.accommodation_id ? {
+        id: registration.accommodation_id,
+        name: registration.accommodation
+      } : null;
+
       return res.status(200).json({
         success: true,
         data: {
@@ -458,7 +501,7 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
           attendanceStatus: registration.attendance_status,
           feeAmount: registration.fee_amount,
           paymentRequired: parseFloat(registration.fee_amount) > 0,
-          accommodation: registration.accommodation,
+          accommodation: accommodationData,
           teamInfo
         }
       });
