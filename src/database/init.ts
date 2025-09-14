@@ -194,6 +194,7 @@ export async function initDB() {
         attendance_status attendance_status DEFAULT 'absent',
         payment_status BOOLEAN DEFAULT false,
         non_veg BOOLEAN DEFAULT false,
+        accommodation TEXT,
         UNIQUE(student_id, event_id)
       );
     `);

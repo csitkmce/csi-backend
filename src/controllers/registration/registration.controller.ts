@@ -15,7 +15,7 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
   try {
     const userId = req.user?.user_id;
     const userName = req.user?.name;
-    const { eventId, teamName } = req.body;
+    const { eventId, teamName, accommodation } = req.body;
 
     console.log("Step 1: Validating input");
     if (!userId || !eventId) {
@@ -53,7 +53,15 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
     }
 
     console.log("Step 6: Handling registration flow");
-    const result = await handleRegistrationFlow(client, userId, userName.trim(), eventId, event, teamName);
+    const result = await handleRegistrationFlow(
+      client, 
+      userId, 
+      userName.trim(), 
+      eventId, 
+      event, 
+      teamName,
+      accommodation
+    );
     console.log("✅ Registration flow completed", result);
 
     await client.query("COMMIT");
@@ -92,7 +100,7 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   
   try {
     const userId = req.user?.user_id;
-    const { eventId, teamCode } = req.body;
+    const { eventId, teamCode, accommodation } = req.body;
     
     if (!userId || !teamCode || !eventId) {
       return res.status(400).json({ 
@@ -177,15 +185,14 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-const memberCountResult = await client.query(
-  `SELECT COUNT(*) as count 
-   FROM team_registrations tr
-   JOIN registrations r ON tr.registration_id = r.registration_id
-   WHERE tr.team_id = $1`,
-  [team.team_id]
-);
+    const memberCountResult = await client.query(
+      `SELECT COUNT(*) as count 
+       FROM team_registrations tr
+       JOIN registrations r ON tr.registration_id = r.registration_id
+       WHERE tr.team_id = $1`,
+      [team.team_id]
+    );
 
-    
     const currentMembers = parseInt(memberCountResult.rows[0].count);
     
     if (currentMembers >= team.max_team_size) {
@@ -197,10 +204,11 @@ const memberCountResult = await client.query(
       });
     }
 
+    // Create registration
     const regResult = await client.query(
-      `INSERT INTO registrations (student_id, event_id) 
-       VALUES ($1, $2) RETURNING registration_id, timestamp`,
-      [userId, team.event_id]
+      `INSERT INTO registrations (student_id, event_id, accommodation) 
+       VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
+      [userId, team.event_id, accommodation || null]
     );
     
     const registrationId = regResult.rows[0].registration_id;
@@ -212,17 +220,16 @@ const memberCountResult = await client.query(
       [registrationId, team.team_id]
     );
 
-const teamMembersResult = await client.query(
-  `SELECT u.user_id, u.name
-   FROM team_registrations tr
-   JOIN registrations r ON tr.registration_id = r.registration_id
-   JOIN users u ON r.student_id = u.user_id
-   JOIN teams t ON tr.team_id = t.team_id
-   WHERE tr.team_id = $1 AND t.team_lead_id != u.user_id
-   ORDER BY r.timestamp`,
-  [team.team_id]
-);
-
+    const teamMembersResult = await client.query(
+      `SELECT u.user_id, u.name
+       FROM team_registrations tr
+       JOIN registrations r ON tr.registration_id = r.registration_id
+       JOIN users u ON r.student_id = u.user_id
+       JOIN teams t ON tr.team_id = t.team_id
+       WHERE tr.team_id = $1 AND t.team_lead_id != u.user_id
+       ORDER BY r.timestamp`,
+      [team.team_id]
+    );
 
     const teamMembers = teamMembersResult.rows.map((member) => ({
       id: member.user_id,
@@ -254,7 +261,8 @@ const teamMembersResult = await client.query(
         teamIsFull: (currentMembers + 1) >= team.max_team_size,
         feeAmount: team.fee_amount,
         paymentRequired: parseFloat(team.fee_amount) > 0,
-        timestamp: timestamp
+        timestamp: timestamp,
+        accommodation: accommodation || null
       }
     });
 
@@ -331,19 +339,16 @@ export const getTeamByCode = async (req: AuthenticatedRequest, res: Response) =>
 
     const team = teamResult.rows[0];
 
-const membersResult = await client.query(
-  `SELECT u.user_id, u.name, u.email, r.timestamp
-   FROM team_registrations tr
-   JOIN registrations r ON tr.registration_id = r.registration_id
-   JOIN users u ON r.student_id = u.user_id
-   WHERE tr.team_id = $1
-   ORDER BY r.timestamp`,
-  [team.team_id]
-);
-console.log("Members query result:", membersResult.rows);
-
-
-
+    const membersResult = await client.query(
+      `SELECT u.user_id, u.name, u.email, r.timestamp
+       FROM team_registrations tr
+       JOIN registrations r ON tr.registration_id = r.registration_id
+       JOIN users u ON r.student_id = u.user_id
+       WHERE tr.team_id = $1
+       ORDER BY r.timestamp`,
+      [team.team_id]
+    );
+    console.log("Members query result:", membersResult.rows);
 
     return res.json({
       success: true,
@@ -374,7 +379,6 @@ console.log("Members query result:", membersResult.rows);
   }
 };
 
-
 export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.user_id;
@@ -392,7 +396,7 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
     try {
       const registrationResult = await client.query(
         `SELECT r.registration_id, r.timestamp, r.payment_status, r.attendance_status,
-                e.event_name, e.max_team_size, e.fee_amount
+                r.accommodation, e.event_name, e.max_team_size, e.fee_amount
          FROM registrations r
          JOIN events e ON r.event_id = e.event_id
          WHERE r.student_id = $1 AND r.event_id = $2`,
@@ -415,18 +419,17 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
       let teamInfo = null;
       if (isTeamEvent) {
         const teamResult = await client.query(
-  `SELECT t.team_id, t.team_name, t.team_code, t.team_lead_id,
-          COUNT(tr.registration_id) as current_members,
-          e.max_team_size, e.min_team_size
-   FROM team_registrations tr_user
-   JOIN teams t ON tr_user.team_id = t.team_id
-   JOIN events e ON t.event_id = e.event_id
-   LEFT JOIN team_registrations tr ON t.team_id = tr.team_id
-   WHERE tr_user.registration_id = $1
-   GROUP BY t.team_id, t.team_name, t.team_code, t.team_lead_id, e.max_team_size, e.min_team_size`
-  ,[registration.registration_id]
-);
-
+          `SELECT t.team_id, t.team_name, t.team_code, t.team_lead_id,
+                  COUNT(tr.registration_id) as current_members,
+                  e.max_team_size, e.min_team_size
+           FROM team_registrations tr_user
+           JOIN teams t ON tr_user.team_id = t.team_id
+           JOIN events e ON t.event_id = e.event_id
+           LEFT JOIN team_registrations tr ON t.team_id = tr.team_id
+           WHERE tr_user.registration_id = $1
+           GROUP BY t.team_id, t.team_name, t.team_code, t.team_lead_id, e.max_team_size, e.min_team_size`,
+          [registration.registration_id]
+        );
 
         if ((teamResult.rowCount ?? 0) > 0) {
           const team = teamResult.rows[0];
@@ -455,6 +458,7 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
           attendanceStatus: registration.attendance_status,
           feeAmount: registration.fee_amount,
           paymentRequired: parseFloat(registration.fee_amount) > 0,
+          accommodation: registration.accommodation,
           teamInfo
         }
       });
