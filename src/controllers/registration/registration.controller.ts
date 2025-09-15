@@ -15,7 +15,7 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
   try {
     const userId = req.user?.user_id;
     const userName = req.user?.name;
-    const { eventId, teamName, accommodationId } = req.body;
+    const { eventId, teamName, accommodationId,foodPref } = req.body;
 
     console.log("Step 1: Validating input");
     if (!userId || !eventId) {
@@ -71,7 +71,8 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
       eventId, 
       event, 
       teamName,
-      accommodationId
+      accommodationId,
+      foodPref
     );
     console.log("✅ Registration flow completed", result);
 
@@ -111,7 +112,7 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   
   try {
     const userId = req.user?.user_id;
-    const { eventId, teamCode, accommodationId } = req.body;
+    const { eventId, teamCode, accommodationId,foodPref } = req.body;
     
     if (!userId || !teamCode || !eventId) {
       return res.status(400).json({ 
@@ -228,9 +229,9 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
 
     // Create registration
     const regResult = await client.query(
-      `INSERT INTO registrations (student_id, event_id, accommodation_id) 
-       VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
-      [userId, team.event_id, accommodationId || null]
+      `INSERT INTO registrations (student_id, event_id, accommodation_id,food_preference) 
+       VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
+      [userId, team.event_id, accommodationId || null,foodPref || 'No food']
     );
     
     const registrationId = regResult.rows[0].registration_id;

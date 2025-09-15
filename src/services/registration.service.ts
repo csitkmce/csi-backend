@@ -104,13 +104,14 @@ export async function handleRegistrationFlow(
   eventId: string,
   event: Event,
   teamName?: string,
-  accommodationId?: number
+  accommodationId?: number,
+  foodPref?: string
 ): Promise<any> {
   const isSoloEvent = event.max_team_size === 1;
   const isTeamEvent = event.max_team_size > 1;
 
   if (isSoloEvent) {
-    return await handleSoloEventRegistration(client, userId, eventId, event, accommodationId);
+    return await handleSoloEventRegistration(client, userId, eventId, event, accommodationId,foodPref);
   }
 
   if (isTeamEvent) {
@@ -121,7 +122,8 @@ export async function handleRegistrationFlow(
       eventId, 
       event, 
       teamName,
-      accommodationId
+      accommodationId,
+      foodPref
     );
   }
 
@@ -135,12 +137,13 @@ async function handleSoloEventRegistration(
   userId: string, 
   eventId: string, 
   event: Event,
-  accommodationId?: number
+  accommodationId?: number,
+  foodPref?: string
 ): Promise<any> {
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id, accommodation_id)
-     VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
-    [userId, eventId, accommodationId || null]
+    `INSERT INTO registrations (student_id, event_id, accommodation_id,food_preference)
+     VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
+    [userId, eventId, accommodationId || null,foodPref || 'No food']
   );
   
   const feeAmount = parseFloat(event.fee_amount);
@@ -170,7 +173,8 @@ async function handleSoloEventRegistration(
       feeAmount: event.fee_amount,
       paymentRequired: feeAmount > 0,
       timestamp: regResult.rows[0].timestamp,
-      accommodation: accommodationData
+      accommodation: accommodationData,
+      foodPreference: foodPref || 'No food'
     }
   };
 }
@@ -182,7 +186,8 @@ async function handleTeamEventRegistration(
   eventId: string,
   event: Event,
   teamName?: string,
-  accommodationId?: number
+  accommodationId?: number,
+  foodPref?: string
 ): Promise<any> {
   let finalTeamName: string;
 
@@ -211,9 +216,9 @@ async function handleTeamEventRegistration(
 
   // Create registration 
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id, accommodation_id)
-     VALUES ($1, $2, $3) RETURNING registration_id, timestamp`,
-    [userId, eventId, accommodationId || null]
+    `INSERT INTO registrations (student_id, event_id, accommodation_id,food_preference)
+     VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
+    [userId, eventId, accommodationId || null,foodPref || 'No food' ]
   );
 
   const registrationId = regResult.rows[0].registration_id;
@@ -274,7 +279,8 @@ async function handleTeamEventRegistration(
       feeAmount: event.fee_amount,
       paymentRequired: feeAmount > 0,
       timestamp: timestamp,
-      accommodation: accommodationData
+      accommodation: accommodationData,
+      foodPreference: foodPref || 'No food' 
     }
   };
 }

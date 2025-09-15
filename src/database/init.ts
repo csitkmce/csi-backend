@@ -200,7 +200,7 @@ export async function initDB() {
         certificate VARCHAR(255),
         attendance_status attendance_status DEFAULT 'absent',
         payment_status BOOLEAN DEFAULT false,
-        non_veg BOOLEAN DEFAULT false,
+        food_preference TEXT DEFAULT 'No food',
         accommodation_id INTEGER REFERENCES accommodations(id) ON DELETE SET NULL,
         UNIQUE(student_id, event_id)
       );
