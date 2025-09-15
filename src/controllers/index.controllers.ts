@@ -103,6 +103,7 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
       events.push(eventData);
     }
 
+    
     return res.json({ name: userName, events });
   } catch (err) {
     console.error("Error in getHome:", err);
