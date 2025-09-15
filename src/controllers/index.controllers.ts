@@ -15,6 +15,21 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(400).json({ message: "User ID missing from token" });
     }
 
+    const userResult = await pool.query(
+      `SELECT u.name, u.email, u.batch, u.year, d.department_name
+       FROM users u
+       LEFT JOIN departments d ON u.department_id = d.department_id
+       WHERE u.user_id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const userData = userResult.rows[0];
+    const { name, email, batch, year, department_name } = userData;
+
     const { rows } = await pool.query(
       `SELECT e.event_id, e.event_name, e.event_description, e.event_image, e.venue,
               e.event_start_time, e.event_end_time, e.whatsapp_link,
@@ -49,6 +64,7 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
           max: event.max_team_size,
         },
         certificate: event.certificate || null,
+        registrationId: event.registration_id
       };
 
       if (event.max_team_size > 1) {
@@ -70,21 +86,18 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
            ORDER BY CASE WHEN t.team_lead_id = u.user_id THEN 0 ELSE 1 END`,
           [event.registration_id]
         );
-
         if ((teamInfo?.rowCount ?? 0) > 0) {
           const teamData = teamInfo.rows[0];
           const teamCode = teamData.team_code;
           const teamName = teamData.team_name;
           const teamLeadId = teamData.team_lead_id;
           const teamLeadName = teamData.team_lead_name;
-
           const members = teamInfo.rows
             .filter((m) => m.user_id !== teamLeadId)
             .map((m) => ({
               id: m.user_id,
               name: m.name,
             }));
-
           eventData.teamId = teamData.team_id;
           eventData.teamName = teamName;
           eventData.teamCode = teamCode;
@@ -99,12 +112,17 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
       } else {
         eventData.eventType = "solo";
       }
-
       events.push(eventData);
     }
-
     
-    return res.json({ name: userName, events });
+    return res.json({ 
+      name: name, 
+      email: email,
+      department: department_name,
+      batch: batch.trim(), 
+      graduationYear: year,
+      events 
+    });
   } catch (err) {
     console.error("Error in getHome:", err);
     return res.status(500).json({ message: "Internal server error" });
