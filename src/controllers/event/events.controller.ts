@@ -215,7 +215,7 @@ export const getEventDetails = async (
       teamNameRequired: event.team_name_required,
       status: event.status,
       maxRegistrations: event.max_registrations,
-      whatsappLink: event.whatsapp_link,
+      whatsapp: event.whatsapp_link,
     };
 
     return res.json({
