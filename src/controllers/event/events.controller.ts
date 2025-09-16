@@ -180,6 +180,17 @@ export const getEventDetails = async (
     
     const event = eventRows[0];
     
+    let isRegistered = false;
+    if (req.isLoggedIn && req.user) {
+      console.log('User is logged in, checking registration status');
+      
+      const { rows: registrationRows } = await pool.query(
+        `SELECT 1 FROM registrations 
+         WHERE student_id = $1 AND event_id = $2`,
+        [req.user.user_id, eventId]
+      );
+      
+      isRegistered = registrationRows.length > 0;}
     const eventDetails = {
       id: event.event_id,
       name: event.event_name,
@@ -200,26 +211,14 @@ export const getEventDetails = async (
       status: event.status,
       maxRegistrations: event.max_registrations,
       whatsapp: event.whatsapp_link,
+      isRegistered: isRegistered
     };
 
-    let isRegistered = false;
     if (req.isLoggedIn && req.user) {
-      console.log('User is logged in, checking registration status');
-      
-      const { rows: registrationRows } = await pool.query(
-        `SELECT 1 FROM registrations 
-         WHERE student_id = $1 AND event_id = $2`,
-        [req.user.user_id, eventId]
-      );
-      
-      isRegistered = registrationRows.length > 0;
-      console.log('User registration status:', isRegistered);
-      
       return res.json({
         event: eventDetails,
         user: req.user,
         isLoggedIn: true,
-        isRegistered: isRegistered  
       });
     } else {
       console.log('User is not logged in');
@@ -227,7 +226,6 @@ export const getEventDetails = async (
         event: eventDetails,
         user: null,
         isLoggedIn: false,
-        isRegistered: false 
       });
     }
     
