@@ -3,9 +3,6 @@ import { pool } from "../../config/db.js";
 import fetch from "node-fetch";
 import type { AuthenticatedRequest } from "../../middleware/auth.middle.js";
 
-let cachedLeaderboard: any[] = [];
-let lastUpdatedTime: number = 0;
-
 function generateBatchQuery(usernames: string[]) {
   const queries = usernames
     .map(
@@ -54,17 +51,7 @@ async function getBatchStats(usernames: string[]) {
   return stats;
 }
 
-
-function getTimeAgo(ms: number) {
-  const diff = Date.now() - ms;
-  const minutes = Math.floor(diff / (1000 * 60));
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}min ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
-}
-
-async function refreshLeaderboardCache() {
+async function getLeaderboardData() {
   try {
     // 1. Join leetcode_users with users to get name + username
     const result = await pool.query(`
@@ -97,29 +84,25 @@ async function refreshLeaderboardCache() {
     merged.sort((a, b) => b.totalSolved - a.totalSolved);
 
     // 6. Format leaderboard
-    cachedLeaderboard = merged.map((u, i) => ({
+    const leaderboard = merged.map((u, i) => ({
       rank: i + 1,
       name: u.dbName,
       username: u.username,
       points: u.totalSolved,
     }));
 
-    lastUpdatedTime = Date.now();
-    console.log("Leaderboard cache refreshed");
+    console.log("Leaderboard data fetched");
+    return leaderboard;
   } catch (err) {
-    console.error("Failed to refresh leaderboard cache:", err);
+    console.error("Failed to fetch leaderboard data:", err);
+    return [];
   }
 }
 
-
-// Initialize background refresh every 30 minutes
-refreshLeaderboardCache(); 
-setInterval(refreshLeaderboardCache, 30 * 60 * 1000);
 export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (cachedLeaderboard.length === 0) await refreshLeaderboardCache();
-
-    const top15 = cachedLeaderboard.slice(0, 15);
+    const leaderboard = await getLeaderboardData();
+    const top15 = leaderboard.slice(0, 15);
 
     let userRegistered: boolean | null = null;
 
@@ -137,7 +120,7 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
     console.log("userRegistered:", userRegistered);
 
     res.status(200).json({
-      lastUpdated: getTimeAgo(lastUpdatedTime),
+      lastUpdated: "Just now",
       leaderboard: top15,
       userRegistered, // null = not logged in
     });
@@ -146,8 +129,6 @@ export const getLeaderboard = async (req: AuthenticatedRequest, res: Response) =
     res.status(500).json({ error: "Failed to fetch leaderboard" });
   }
 };
-
-
 
 export async function registerLeetcode(req: AuthenticatedRequest, res: Response) {
   const { leetcodeId } = req.body;
@@ -171,7 +152,6 @@ const result = await pool.query(
    RETURNING *`,
   [user_id, leetcodeId]
 );
-
 
     res.status(201).json({
       message: "LeetCode ID registered successfully",
