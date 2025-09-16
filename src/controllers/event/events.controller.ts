@@ -147,18 +147,19 @@ export const getEventDetails = async (
   console.log('--- getEventDetails called ---');
   console.log('req.params:', req.params);
   console.log('req.user:', req.user);
-
+  console.log('req.isLoggedIn:', req.isLoggedIn);
+  
   const eventId = req.params.eventId;
   console.log('eventId from params:', eventId);
-
+  
   if (!eventId) {
     console.error('No eventId provided in URL params!');
     return res.status(400).json({ error: 'Event ID is required' });
   }
-
+  
   try {
     const { rows: eventRows } = await pool.query(
-      `SELECT 
+      `SELECT
          event_id, event_name, event_description, event_image,
          venue, reg_start_time, reg_end_time,
          event_start_time, event_end_time,
@@ -169,33 +170,16 @@ export const getEventDetails = async (
        WHERE event_id = $1 AND status = 'active'`,
       [eventId]
     );
-
+    
     console.log('eventRows:', eventRows);
-
+    
     if (eventRows.length === 0) {
       console.warn(`Event not found or inactive for ID: ${eventId}`);
       return res.status(404).json({ error: "Event not found or inactive" });
     }
-
+    
     const event = eventRows[0];
-
-    const userId = req.user?.user_id;
-    console.log('userId from auth middleware:', userId);
-
-    const { rows: userRows } = await pool.query(
-      `
-      SELECT u.name, u.email, d.department_name AS department, u.batch, u.year
-      FROM users u
-      LEFT JOIN departments d ON u.department_id = d.department_id
-      WHERE u.user_id = $1
-      `,
-      [userId]
-    );
-
-    console.log('userRows:', userRows);
-    const userInfo = userRows[0] || null;
-
-    // Build full event object
+    
     const eventDetails = {
       id: event.event_id,
       name: event.event_name,
@@ -215,13 +199,38 @@ export const getEventDetails = async (
       teamNameRequired: event.team_name_required,
       status: event.status,
       maxRegistrations: event.max_registrations,
-      whatsapp: event.whatsapp_link,
+      whatsappLink: event.whatsapp_link,
     };
 
-    return res.json({
-      event: eventDetails,
-      user: userInfo,
-    });
+    let isRegistered = false;
+    if (req.isLoggedIn && req.user) {
+      console.log('User is logged in, checking registration status');
+      
+      const { rows: registrationRows } = await pool.query(
+        `SELECT 1 FROM registrations 
+         WHERE student_id = $1 AND event_id = $2`,
+        [req.user.user_id, eventId]
+      );
+      
+      isRegistered = registrationRows.length > 0;
+      console.log('User registration status:', isRegistered);
+      
+      return res.json({
+        event: eventDetails,
+        user: req.user,
+        isLoggedIn: true,
+        isRegistered: isRegistered  
+      });
+    } else {
+      console.log('User is not logged in');
+      return res.json({
+        event: eventDetails,
+        user: null,
+        isLoggedIn: false,
+        isRegistered: false 
+      });
+    }
+    
   } catch (error: any) {
     console.error("Error fetching event details:", error);
     return res.status(500).json({ error: "Internal server error" });
