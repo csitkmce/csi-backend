@@ -77,7 +77,7 @@ export async function checkExistingRegistration(client: any, userId: string, eve
 
 export async function getCurrentRegistrationCount(client: any, eventId: string, isTeamEvent: boolean): Promise<number> {
   let countQuery: string;
-
+  isTeamEvent=false
   if (isTeamEvent) {
     countQuery = `
       SELECT COUNT(DISTINCT t.team_id) as count
