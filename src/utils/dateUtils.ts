@@ -17,12 +17,17 @@ export function formatTime(date: Date): string {
 }
 
 export function calculateDayDiff(start: Date, end: Date): number {
-  const startInKolkata = new Date(start.toLocaleString("en-CA", { timeZone: "UTC" }));
-  const endInKolkata = new Date(end.toLocaleString("en-CA", { timeZone: "UTC" }));
-  
-  const startDate = new Date(startInKolkata.getFullYear(), startInKolkata.getMonth(), startInKolkata.getDate());
-  const endDate = new Date(endInKolkata.getFullYear(), endInKolkata.getMonth(), endInKolkata.getDate());
-  
-  const diffMs = endDate.getTime() - startDate.getTime();
-  return Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  if (!(start instanceof Date) || isNaN(start.getTime()) ||
+      !(end instanceof Date) || isNaN(end.getTime())) {
+    return NaN; // invalid input
+  }
+
+  // Normalize to UTC midnight
+  const startDate = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const endDate = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+
+  const diffMs = endDate - startDate;
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+  return diffDays;
 }
