@@ -10,6 +10,7 @@ import { authenticate } from "../middleware/auth.middle.js";
 import leaderboardRoutes from "./leaderboard/leaderboard.routes.js";
 import accommodationRoutes from "./accommodation/accommodation.routes.js";
 import adminRoutes from "./admin/admin.routes.js";
+import appRoutes from "./app/app.routes.js";
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/leaderboard', leaderboardRoutes);
 router.get('/user',authenticate,getUser);
 router.use('/accommodation', accommodationRoutes);
 router.use('/admin', adminRoutes);
+router.use('/app', appRoutes);
 
 export default router;
