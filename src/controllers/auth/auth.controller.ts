@@ -49,7 +49,7 @@ export const loginUser = async (req: Request, res: Response) => {
 };
 
 export const registerUser = async (req: Request, res: Response) => {
-  const { name, email, department, batch, year, phone_number, password } = req.body;
+  const { name, email, department, batch,college, year, phone_number, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: "Email and password required" });
@@ -60,10 +60,10 @@ export const registerUser = async (req: Request, res: Response) => {
 
     const result = await pool.query(
       `INSERT INTO users 
-        (name, role, email, phone_number, department_id, batch, year, password) 
-       VALUES ($1, 'student', $2, $3, $4, $5, $6, $7 ) 
+        (name, role, email, phone_number, department_id, batch,college, year, password) 
+       VALUES ($1, 'student', $2, $3, $4, $5, $6, $7, $8 ) 
        RETURNING user_id, name, email`,
-      [name, email, phone_number, department, batch, year, hashedPassword]
+      [name, email, phone_number, department, batch, college,year, hashedPassword]
     );
 
     const user = result.rows[0];

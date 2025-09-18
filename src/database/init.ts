@@ -42,7 +42,8 @@ export async function initDB() {
         department_id UUID REFERENCES departments(department_id) ON DELETE SET NULL,
         batch CHAR(10),
         year INT,
-        password VARCHAR(255) NOT NULL
+        password VARCHAR(255) NOT NULL,
+        college TEXT
       );
     `);
 

@@ -6,50 +6,17 @@ import {
   calculateDayDiff,
 } from "../../utils/dateUtils.js";
 import type { AuthenticatedRequest } from "../../middleware/auth.middle.js";
-import { verifyAccessToken } from "../../utils/jwt.js";
 
 export const getEvents = async (req: Request, res: Response) => {
   try {
-    const loggedIn = req.query.loggedin === "true";
-    let userId: string | null = null;
-
-    if (loggedIn) {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        return res.status(401).json({ error: "Authorization header missing" });
-      }
-
-      const parts = authHeader.split(" ");
-      if (parts.length !== 2 || !parts[1]) {
-        return res
-          .status(401)
-          .json({ error: "Malformed authorization header" });
-      }
-
-      const token = parts[1];
-      try {
-        const payload = verifyAccessToken(token) as any;
-        userId = payload.user_id;
-      } catch (err) {
-        return res.status(401).json({ error: "Invalid or expired token" });
-      }
-    }
-
     const { rows } = await pool.query(`
-      SELECT 
+      SELECT
         e.*,
-        CASE 
-          WHEN e.max_team_size = 1 THEN (
-            SELECT COUNT(DISTINCT r.registration_id)
-            FROM registrations r
-            WHERE r.event_id = e.event_id
-          )
-          ELSE (
-            SELECT COUNT(DISTINCT t.team_id)
-            FROM teams t
-            WHERE t.event_id = e.event_id
-          )
-        END AS registrations_count
+        (
+          SELECT COUNT(DISTINCT r.registration_id)
+          FROM registrations r
+          WHERE r.event_id = e.event_id
+        ) AS registrations_count
       FROM events e
       ORDER BY e.event_start_time ASC;
     `);
@@ -58,26 +25,6 @@ export const getEvents = async (req: Request, res: Response) => {
     const upcoming: any[] = [];
     const ongoing: any[] = [];
     const past: any[] = [];
-
-    let userRegistrations = new Set<string>();
-
-    if (loggedIn && userId) {
-      const { rows: regRows } = await pool.query(
-        `
-        SELECT event_id
-        FROM registrations
-        WHERE user_id = $1
-        UNION
-        SELECT t.event_id
-        FROM teams t
-        JOIN team_members tm ON t.team_id = tm.team_id
-        WHERE tm.user_id = $1
-        `,
-        [userId]
-      );
-
-      userRegistrations = new Set(regRows.map((r) => r.event_id));
-    }
 
     for (const event of rows) {
       if (event.status !== "active") continue;
@@ -91,10 +38,9 @@ export const getEvents = async (req: Request, res: Response) => {
       const maxRegs = Number(event.max_registrations) || 0;
 
       const regOpen = now >= regStart && now <= regEnd;
+      const regClosed = now > regEnd; 
+      
       const isRegistrationFull = maxRegs > 0 && currentRegs >= maxRegs;
-
-      const registered =
-        loggedIn && userId ? userRegistrations.has(event.event_id) : false;
 
       const durationDays = calculateDayDiff(start, end);
 
@@ -104,19 +50,17 @@ export const getEvents = async (req: Request, res: Response) => {
         description: event.event_description,
         image: event.event_image,
         venue: event.venue,
-
         eventStartDate: formatDate(start),
         eventStartTime: formatTime(start),
         eventEndDate: formatDate(end),
         eventEndTime: formatTime(end),
-
-        regOpen,
+        regOpen, 
+        regClosed, 
         isRegistrationFull,
         regStartDate: formatDate(regStart),
         regStartTime: formatTime(regStart),
         regEndDate: formatDate(regEnd),
         regEndTime: formatTime(regEnd),
-
         durationDays,
         fee: event.fee_amount,
         whatsapp: event.whatsapp_link,
@@ -125,12 +69,15 @@ export const getEvents = async (req: Request, res: Response) => {
           min: event.min_team_size,
           max: event.max_team_size,
         },
-        registered,
       };
 
-      if (now < start) upcoming.push(eventData);
-      else if (now >= start && now <= end) ongoing.push(eventData);
-      else past.push(eventData);
+      if (now < start) {
+        upcoming.push(eventData);
+      } else if (now >= start && now <= end) {
+        ongoing.push(eventData);
+      } else {
+        past.push(eventData);
+      }
     }
 
     res.json({ upcoming, ongoing, past });
@@ -144,16 +91,10 @@ export const getEventDetails = async (
   req: AuthenticatedRequest,
   res: Response
 ) => {
-  console.log('--- getEventDetails called ---');
-  console.log('req.params:', req.params);
-  console.log('req.user:', req.user);
-  console.log('req.isLoggedIn:', req.isLoggedIn);
-  
+
   const eventId = req.params.eventId;
-  console.log('eventId from params:', eventId);
   
   if (!eventId) {
-    console.error('No eventId provided in URL params!');
     return res.status(400).json({ error: 'Event ID is required' });
   }
   
@@ -171,8 +112,6 @@ export const getEventDetails = async (
       [eventId]
     );
     
-    console.log('eventRows:', eventRows);
-    
     if (eventRows.length === 0) {
       console.warn(`Event not found or inactive for ID: ${eventId}`);
       return res.status(404).json({ error: "Event not found or inactive" });
@@ -182,7 +121,6 @@ export const getEventDetails = async (
     
     let isRegistered = false;
     if (req.isLoggedIn && req.user) {
-      console.log('User is logged in, checking registration status');
       
       const { rows: registrationRows } = await pool.query(
         `SELECT 1 FROM registrations 
@@ -221,7 +159,6 @@ export const getEventDetails = async (
         isLoggedIn: true,
       });
     } else {
-      console.log('User is not logged in');
       return res.json({
         event: eventDetails,
         user: null,
