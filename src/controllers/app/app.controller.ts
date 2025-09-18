@@ -11,7 +11,7 @@ export const getAttendanceDetails = async (req: Request, res: Response) => {
 
 const result = await pool.query(
   `SELECT 
-     u.user_id,
+     r.registration_id,
      u.name,
      u.email,
      u.phone_number,
@@ -39,7 +39,7 @@ const result = await pool.query(
 
     // Map DB values to desired response
     const response = {
-      id: user.user_id,
+      id: user.registration_id,
       name: user.name,
       team: user.team_name ?? null,
       food: user.food_preference ?? null,
@@ -49,7 +49,7 @@ const result = await pool.query(
       department: user.department_name,
       present: user.attendance_status === 'present' ? true : false,
     };
-
+console.log("Attendance scan result:", response);
     res.json(response);
   } catch (error) {
     console.error("Error fetching attendance:", error);
