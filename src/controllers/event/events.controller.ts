@@ -18,7 +18,7 @@ export const getEvents = async (req: Request, res: Response) => {
           WHERE r.event_id = e.event_id
         ) AS registrations_count
       FROM events e
-      ORDER BY e.event_start_time ASC;
+      ORDER BY e.event_start_time DESC;
     `);
 
     const now = new Date();
