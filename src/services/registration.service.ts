@@ -1,3 +1,5 @@
+import { getCurrentISTTime, toISTString } from '../utils/dateUtils.js';
+
 interface Event {
   event_id: string;
   event_name: string;
@@ -44,18 +46,36 @@ export async function validateEventAccess(client: any, eventId: string): Promise
     throw error;
   }
 
+  // Get current time (will be in IST because of database timezone settings)
+  const now = getCurrentISTTime();
+  
   // Check registration timing
-  const now = new Date();
-  if (event.reg_start_time && now < new Date(event.reg_start_time)) {
-    const error: CustomError = new Error("Registration has not started yet");
-    error.statusCode = 400;
-    throw error;
+  if (event.reg_start_time) {
+    const regStart = new Date(event.reg_start_time);
+    console.log(` Registration validation:
+      Current time (IST): ${toISTString(now)}
+      Reg start time: ${toISTString(regStart)}
+      Now < RegStart: ${now < regStart}`);
+    
+    if (now < regStart) {
+      const error: CustomError = new Error("Registration has not started yet");
+      error.statusCode = 400;
+      throw error;
+    }
   }
   
-  if (event.reg_end_time && now > new Date(event.reg_end_time)) {
-    const error: CustomError = new Error("Registration has ended");
-    error.statusCode = 400;
-    throw error;
+  if (event.reg_end_time) {
+    const regEnd = new Date(event.reg_end_time);
+    console.log(` Registration validation:
+      Current time (IST): ${toISTString(now)}
+      Reg end time: ${toISTString(regEnd)}
+      Now > RegEnd: ${now > regEnd}`);
+    
+    if (now > regEnd) {
+      const error: CustomError = new Error("Registration has ended");
+      error.statusCode = 400;
+      throw error;
+    }
   }
 
   return event;
@@ -77,7 +97,8 @@ export async function checkExistingRegistration(client: any, userId: string, eve
 
 export async function getCurrentRegistrationCount(client: any, eventId: string, isTeamEvent: boolean): Promise<number> {
   let countQuery: string;
-  isTeamEvent=false
+  isTeamEvent = false;
+  
   if (isTeamEvent) {
     countQuery = `
       SELECT COUNT(DISTINCT t.team_id) as count
@@ -111,7 +132,7 @@ export async function handleRegistrationFlow(
   const isTeamEvent = event.max_team_size > 1;
 
   if (isSoloEvent) {
-    return await handleSoloEventRegistration(client, userId, eventId, event, accommodationId,foodPref);
+    return await handleSoloEventRegistration(client, userId, eventId, event, accommodationId, foodPref);
   }
 
   if (isTeamEvent) {
@@ -141,9 +162,9 @@ async function handleSoloEventRegistration(
   foodPref?: string
 ): Promise<any> {
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id, accommodation_id,food_preference)
+    `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference)
      VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
-    [userId, eventId, accommodationId || null,foodPref || 'No food']
+    [userId, eventId, accommodationId || null, foodPref || 'No food']
   );
   
   const feeAmount = parseFloat(event.fee_amount);
@@ -195,7 +216,7 @@ async function handleTeamEventRegistration(
   if (teamName && teamName.trim() !== "") {
     finalTeamName = teamName.trim();
 
-    // Optional: check for duplicates
+    // Check for duplicates
     const nameCheck = await client.query(
       `SELECT 1 FROM teams 
        WHERE event_id = $1 AND LOWER(team_name) = LOWER($2) 
@@ -216,9 +237,9 @@ async function handleTeamEventRegistration(
 
   // Create registration 
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id, accommodation_id,food_preference)
+    `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference)
      VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
-    [userId, eventId, accommodationId || null,foodPref || 'No food' ]
+    [userId, eventId, accommodationId || null, foodPref || 'No food']
   );
 
   const registrationId = regResult.rows[0].registration_id;
@@ -280,7 +301,7 @@ async function handleTeamEventRegistration(
       paymentRequired: feeAmount > 0,
       timestamp: timestamp,
       accommodation: accommodationData,
-      foodPreference: foodPref || 'No food' 
+      foodPreference: foodPref || 'No food'
     }
   };
 }

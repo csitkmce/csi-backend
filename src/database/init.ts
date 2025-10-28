@@ -1,9 +1,12 @@
-// src/database/init.ts (Updated with payments table)
+// src/database/init.ts - Updated with IST timezone
 import { pool } from "../config/db.js";
 
 export async function initDB() {
   try {
-   
+    // Set timezone to IST for all connections
+    await pool.query(`SET timezone = 'Asia/Kolkata';`);
+    
+    
     await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
 
     // ENUMs
@@ -55,10 +58,10 @@ export async function initDB() {
         event_description TEXT,
         event_image VARCHAR(255),
         venue VARCHAR(255),
-        reg_start_time TIMESTAMP,
-        reg_end_time TIMESTAMP,
-        event_start_time TIMESTAMP,
-        event_end_time TIMESTAMP,
+        reg_start_time TIMESTAMPTZ,
+        reg_end_time TIMESTAMPTZ,
+        event_start_time TIMESTAMPTZ,
+        event_end_time TIMESTAMPTZ,
         fee_amount DECIMAL(10,2) DEFAULT 0,
         status event_status DEFAULT 'active',
         max_registrations INT,
@@ -169,7 +172,7 @@ export async function initDB() {
         team_name VARCHAR(255) NOT NULL,
         team_lead_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
         event_id UUID REFERENCES events(event_id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(event_id, team_code),
         CONSTRAINT check_team_name_length CHECK (LENGTH(TRIM(team_name)) BETWEEN 1 AND 100)
       );
@@ -195,14 +198,14 @@ export async function initDB() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS registrations (
         registration_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        timestamp TIMESTAMP DEFAULT NOW(),
+        timestamp TIMESTAMPTZ DEFAULT NOW(),
         student_id UUID REFERENCES users(user_id) ON DELETE CASCADE NOT NULL,
         event_id UUID REFERENCES events(event_id) ON DELETE CASCADE NOT NULL,
         certificate VARCHAR(255),
         attendance_status attendance_status DEFAULT 'absent',
         payment_status BOOLEAN DEFAULT false,
         food_preference TEXT DEFAULT 'No food',
-        accommodation_id INTEGER REFERENCES accommodations(id) ON DELETE SET NULL,
+        accommodation_id INTEGER REFERENCES accommodations(accommodation_id) ON DELETE SET NULL,
         UNIQUE(student_id, event_id)
       );
     `);
@@ -217,8 +220,8 @@ export async function initDB() {
         razorpay_signature VARCHAR(255),
         amount DECIMAL(10,2) NOT NULL,
         status payment_status DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
@@ -227,7 +230,7 @@ export async function initDB() {
       CREATE TABLE IF NOT EXISTS team_registrations (
         registration_id UUID PRIMARY KEY REFERENCES registrations(registration_id) ON DELETE CASCADE,
         team_id UUID REFERENCES teams(team_id) ON DELETE CASCADE,
-        joined_at TIMESTAMP DEFAULT NOW(),
+        joined_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(team_id, registration_id)
       );
     `);
@@ -297,9 +300,9 @@ export async function initDB() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS leetcode_users (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
+        user_id UUID UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
         username VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
@@ -379,9 +382,7 @@ export async function initDB() {
       WHERE max_team_size = 1 AND team_name_required = true;
     `);
 
-    console.log(
-      "Tables, constraints, triggers, and indexes created/checked successfully"
-    );
+    console.log("Tables, constraints, triggers, and indexes created/checked successfully");
 
     // Show current timezone 
     const timezoneResult = await pool.query(`SHOW timezone;`);

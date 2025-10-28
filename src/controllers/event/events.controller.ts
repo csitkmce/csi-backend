@@ -4,6 +4,8 @@ import {
   formatDate,
   formatTime,
   calculateDayDiff,
+  getCurrentISTTime,
+  toISTString,
 } from "../../utils/dateUtils.js";
 import type { AuthenticatedRequest } from "../../middleware/auth.middle.js";
 
@@ -21,7 +23,9 @@ export const getEvents = async (req: Request, res: Response) => {
       ORDER BY e.event_start_time DESC;
     `);
 
-    const now = new Date();
+    const now = getCurrentISTTime();
+    console.log(`Current IST time: ${toISTString(now)}`);
+    
     const upcoming: any[] = [];
     const ongoing: any[] = [];
     const past: any[] = [];
@@ -91,7 +95,6 @@ export const getEventDetails = async (
   req: AuthenticatedRequest,
   res: Response
 ) => {
-
   const eventId = req.params.eventId;
   
   if (!eventId) {
@@ -121,14 +124,15 @@ export const getEventDetails = async (
     
     let isRegistered = false;
     if (req.isLoggedIn && req.user) {
-      
       const { rows: registrationRows } = await pool.query(
         `SELECT 1 FROM registrations 
          WHERE student_id = $1 AND event_id = $2`,
         [req.user.user_id, eventId]
       );
       
-      isRegistered = registrationRows.length > 0;}
+      isRegistered = registrationRows.length > 0;
+    }
+    
     const eventDetails = {
       id: event.event_id,
       name: event.event_name,

@@ -7,9 +7,10 @@ import {
   handleRegistrationFlow,
   getCurrentRegistrationCount
 } from "../../services/registration.service.js";
+import { getCurrentISTTime, toISTString } from "../../utils/dateUtils.js";
 
 export const registerForEvent = async (req: AuthenticatedRequest, res: Response) => {
-  console.log("✅ registerForEvent called", { user: req.user, body: req.body });
+  console.log("registerForEvent called", { user: req.user, body: req.body });
 
   const client = await pool.connect();
   try {
@@ -112,7 +113,7 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   
   try {
     const userId = req.user?.user_id;
-    const { eventId, teamCode, accommodationId,foodPref } = req.body;
+    const { eventId, teamCode, accommodationId, foodPref } = req.body;
     
     if (!userId || !teamCode || !eventId) {
       return res.status(400).json({ 
@@ -181,21 +182,38 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const now = new Date();
-    if (team.reg_start_time && now < new Date(team.reg_start_time)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Registration has not started yet" 
-      });
+    const now = getCurrentISTTime();
+    
+    if (team.reg_start_time) {
+      const regStart = new Date(team.reg_start_time);
+      console.log(`Join team validation:
+        Current time (IST): ${toISTString(now)}
+        Reg start time: ${toISTString(regStart)}
+        Now < RegStart: ${now < regStart}`);
+      
+      if (now < regStart) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ 
+          success: false, 
+          message: "Registration has not started yet" 
+        });
+      }
     }
     
-    if (team.reg_end_time && now > new Date(team.reg_end_time)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Registration has ended" 
-      });
+    if (team.reg_end_time) {
+      const regEnd = new Date(team.reg_end_time);
+      console.log(`Join team validation:
+        Current time (IST): ${toISTString(now)}
+        Reg end time: ${toISTString(regEnd)}
+        Now > RegEnd: ${now > regEnd}`);
+      
+      if (now > regEnd) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ 
+          success: false, 
+          message: "Registration has ended" 
+        });
+      }
     }
 
     await checkExistingRegistration(client, userId, team.event_id);
@@ -229,9 +247,9 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
 
     // Create registration
     const regResult = await client.query(
-      `INSERT INTO registrations (student_id, event_id, accommodation_id,food_preference) 
+      `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference) 
        VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
-      [userId, team.event_id, accommodationId || null,foodPref || 'No food']
+      [userId, team.event_id, accommodationId || null, foodPref || 'No food']
     );
     
     const registrationId = regResult.rows[0].registration_id;
