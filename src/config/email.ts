@@ -74,7 +74,7 @@ export function getPasswordResetEmailTemplate(resetLink: string, userName: strin
             </div>
             <p>Or copy and paste this link into your browser:</p>
             <p style="word-break: break-all; color: #4CAF50;">${resetLink}</p>
-            <p class="warning">⚠️ This link will expire in 15 minutes.</p>
+            <p class="warning"> This link will expire in 15 minutes.</p>
             <p>If you didn't request a password reset, you can safely ignore this email. Your password will not be changed.</p>
           </div>
           <div class="footer">
