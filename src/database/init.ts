@@ -306,6 +306,34 @@ export async function initDB() {
       );
     `);
 
+    // Password reset tokens table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        token_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        token VARCHAR(255) UNIQUE NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Indexes for password reset tokens
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token 
+      ON password_reset_tokens(token) WHERE used = false;
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expiry 
+      ON password_reset_tokens(expires_at) WHERE used = false;
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user 
+      ON password_reset_tokens(user_id);
+    `);
+    
     // Create indexes for better performance and race condition prevention
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_registrations_event_student 
