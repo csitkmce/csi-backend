@@ -37,6 +37,32 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
 
     const user = userResult.rows[0];
 
+    // Check if there's already a valid, unused token
+    const existingTokenResult = await client.query(
+      `SELECT token_id, expires_at 
+       FROM password_reset_tokens 
+       WHERE user_id = $1 AND used = false AND expires_at > NOW()
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [user.user_id]
+    );
+
+    // If valid token exists, don't create a new one
+    if (existingTokenResult.rowCount && existingTokenResult.rowCount > 0) {
+      const existingToken = existingTokenResult.rows[0];
+      const expiresAt = new Date(existingToken.expires_at);
+      const minutesRemaining = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60));
+      
+      console.log(`Valid token already exists for user: ${email}. Expires in ${minutesRemaining} minutes.`);
+      
+      await client.query('COMMIT');
+      
+      return res.json({
+        success: true,
+        message: 'If an account exists with this email, you will receive a password reset link shortly.'
+      });
+    }
+
     // Generate secure random token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = crypto
@@ -47,9 +73,10 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     // Set expiry to 15 minutes from now
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
+    // Delete any old tokens (expired or used)
     await client.query(
       `DELETE FROM password_reset_tokens
-      WHERE user_id = $1`,
+       WHERE user_id = $1`,
       [user.user_id]
     );
 
