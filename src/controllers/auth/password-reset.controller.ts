@@ -47,9 +47,9 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
     // Set expiry to 15 minutes from now
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    // Invalidate any existing unused tokens for this user
     await client.query(
-      'UPDATE password_reset_tokens SET used = true WHERE user_id = $1 AND used = false',
+      `DELETE FROM password_reset_tokens
+      WHERE user_id = $1`,
       [user.user_id]
     );
 
