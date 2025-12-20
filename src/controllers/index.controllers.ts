@@ -37,7 +37,7 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
               r.registration_id, r.certificate
        FROM registrations r
        JOIN events e ON r.event_id = e.event_id
-       WHERE r.student_id = $1
+       WHERE r.student_id = $1 AND e.status = 'active'
        ORDER BY e.event_start_time ASC;`,
       [userId]
     );
