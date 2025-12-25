@@ -146,7 +146,7 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
     // Send confirmation email for FREE events
     if (result.sendEmail && userEmail) {
       console.log("📧 Sending email for free event...");
-      sendRegistrationEmail(userEmail, userName, result.data, eventDetails).catch(error => {
+      await sendRegistrationEmail(userEmail, userName, result.data, eventDetails).catch(error => {
         console.error("Failed to send registration email:", error);
       });
     } else {
@@ -410,7 +410,7 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
         event_end_time: team.event_end_time,
         whatsapp_link: team.whatsapp_link
       };
-      sendRegistrationEmail(userEmail, userName || 'User', response.data, eventDetails).catch(error => {
+      await sendRegistrationEmail(userEmail, userName || 'User', response.data, eventDetails).catch(error => {
         console.error("Failed to send registration email:", error);
       });
     }

@@ -330,7 +330,7 @@ export const verifyPayment = async (req: AuthenticatedRequest, res: Response) =>
           foodPreference: member.food_preference
         };
 
-        sendRegistrationEmail(
+        await sendRegistrationEmail(
           member.email,
           member.name,
           memberRegistrationData,
@@ -365,7 +365,7 @@ export const verifyPayment = async (req: AuthenticatedRequest, res: Response) =>
         foodPreference: regDetails.food_preference
       };
 
-      sendRegistrationEmail(
+      await sendRegistrationEmail(
         payment.user_email,
         payment.user_name,
         soloRegistrationData,
