@@ -267,7 +267,7 @@ export function getRegistrationConfirmationTemplate(data: RegistrationEmailData)
             </div>
             
             <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard" class="button">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/" class="button">
                 View Dashboard
               </a>
             </div>
@@ -312,7 +312,7 @@ IMPORTANT NOTES:
 - Show your QR code (Registration ID: ${data.registrationId}) at the registration desk
 - Arrive 15 minutes before the event starts
 
-View your dashboard: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard
+View your dashboard: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/
 
 
 
