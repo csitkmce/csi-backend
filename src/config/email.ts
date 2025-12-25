@@ -1,16 +1,5 @@
 import nodemailer from 'nodemailer';
 
-// Configure email service
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.EMAIL_PORT || '587'),
-  secure: false, 
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD, 
-  },
-});
-
 interface SendEmailOptions {
   to: string;
   subject: string;
@@ -19,22 +8,33 @@ interface SendEmailOptions {
 }
 
 export async function sendEmail({ to, subject, html, text }: SendEmailOptions) {
+  const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: false, 
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+
   try {
     const info = await transporter.sendMail({
-      from: `"${process.env.EMAIL_FROM_NAME || 'CSI TKMCE'}" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+      from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM}>`,
       to,
       subject,
       html,
       text,
     });
 
-    console.log('Email sent successfully:', info.messageId);
+    console.log('Email sent:', info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('Error sending email:', error);
     throw error;
   }
 }
+
 
 // Password Reset Email Template
 export function getPasswordResetEmailTemplate(resetLink: string, userName: string) {
