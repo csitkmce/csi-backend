@@ -30,6 +30,8 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
     const userData = userResult.rows[0];
     const { name, email, batch, year, department_name } = userData;
 
+
+    
     const { rows } = await pool.query(
       `SELECT e.event_id, e.event_name, e.event_description, e.event_image, e.venue,
               e.event_start_time, e.event_end_time, e.whatsapp_link,
@@ -37,7 +39,9 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
               r.registration_id, r.certificate
        FROM registrations r
        JOIN events e ON r.event_id = e.event_id
-       WHERE r.student_id = $1 AND e.status = 'active'
+       WHERE r.student_id = $1 
+         AND e.status = 'active'
+         AND r.payment_status = true
        ORDER BY e.event_start_time ASC;`,
       [userId]
     );
@@ -86,6 +90,7 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
            ORDER BY CASE WHEN t.team_lead_id = u.user_id THEN 0 ELSE 1 END`,
           [event.registration_id]
         );
+        
         if ((teamInfo?.rowCount ?? 0) > 0) {
           const teamData = teamInfo.rows[0];
           const teamCode = teamData.team_code;
@@ -131,9 +136,8 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
 
 export default getHome;
 
-
 export const getUser = async (req: AuthenticatedRequest, res: Response) => {
-     try {
+  try {
     const userId = req.user?.user_id;
     const userName = req.user?.name;
     const userEmail = req.user?.email;  
