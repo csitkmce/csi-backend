@@ -7,7 +7,8 @@ import {
   handleRegistrationFlow,
   getCurrentRegistrationCount
 } from "../../services/registration.service.js";
-import { getCurrentISTTime, toISTString } from "../../utils/dateUtils.js";
+import { getCurrentISTTime, toISTString, formatDate, formatTime } from "../../utils/dateUtils.js";
+import { sendEmail, getRegistrationConfirmationTemplate } from "../../config/email.js";
 
 export const registerForEvent = async (req: AuthenticatedRequest, res: Response) => {
   console.log("registerForEvent called", { user: req.user, body: req.body });
@@ -16,7 +17,8 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
   try {
     const userId = req.user?.user_id;
     const userName = req.user?.name;
-    const { eventId, teamName, accommodationId,foodPref } = req.body;
+    const userEmail = req.user?.email;
+    const { eventId, teamName, accommodationId, foodPref } = req.body;
 
     console.log("Step 1: Validating input");
     if (!userId || !eventId) {
@@ -48,7 +50,60 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
     console.log("✅ Event validated", event);
 
     console.log("Step 4: Checking existing registration");
-    await checkExistingRegistration(client, userId, eventId);
+    const existingCheck = await checkExistingRegistration(client, userId, eventId);
+    
+    if (existingCheck.exists) {
+      const existing = existingCheck.registration!;
+      const feeAmount = parseFloat(existing.fee_amount);
+      const isPaidEvent = feeAmount > 0;
+
+      console.log("⚠️ Existing registration found", existing);
+
+      // If already paid, don't allow re-registration
+      if (existing.payment_status) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ 
+          success: false, 
+          message: "You are already registered for this event" 
+        });
+      }
+
+      // If unpaid, return existing registration details
+      await client.query("COMMIT");
+      
+      // Get accommodation details if exists
+      let accommodationData = null;
+      if (existing.accommodation_id) {
+        const accommodationResult = await client.query(
+          'SELECT accommodation_id, accommodation FROM accommodations WHERE accommodation_id = $1',
+          [existing.accommodation_id]
+        );
+        if (accommodationResult.rowCount && accommodationResult.rowCount > 0) {
+          accommodationData = {
+            id: accommodationResult.rows[0].accommodation_id,
+            name: accommodationResult.rows[0].accommodation
+          };
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "You have an existing unpaid registration. Please complete payment.",
+        existingRegistration: true,
+        data: {
+          registrationId: existing.registration_id,
+          eventName: event.event_name,
+          eventType: event.max_team_size > 1 ? "team" : "solo",
+          feeAmount: existing.fee_amount,
+          paymentRequired: isPaidEvent,
+          paymentStatus: false,
+          timestamp: existing.timestamp,
+          accommodation: accommodationData,
+          foodPreference: existing.food_preference
+        }
+      });
+    }
+
     console.log("✅ No existing registration found");
 
     if (event.max_registrations) {
@@ -77,8 +132,27 @@ export const registerForEvent = async (req: AuthenticatedRequest, res: Response)
     );
     console.log("✅ Registration flow completed", result);
 
+    // Get full event details for email
+    const eventDetailsResult = await client.query(
+      `SELECT event_name, venue, event_start_time, event_end_time, whatsapp_link
+       FROM events WHERE event_id = $1`,
+      [eventId]
+    );
+    const eventDetails = eventDetailsResult.rows[0];
+
     await client.query("COMMIT");
     console.log("✅ Transaction committed");
+
+    // Send confirmation email for FREE events
+    if (result.sendEmail && userEmail) {
+      console.log("📧 Sending email for free event...");
+      sendRegistrationEmail(userEmail, userName, result.data, eventDetails).catch(error => {
+        console.error("Failed to send registration email:", error);
+      });
+    } else {
+      console.log("📧 Email NOT sent - waiting for payment or no email flag");
+    }
+
     return res.status(201).json(result);
 
   } catch (error: any) {
@@ -113,6 +187,8 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   
   try {
     const userId = req.user?.user_id;
+    const userName = req.user?.name;
+    const userEmail = req.user?.email;
     const { eventId, teamCode, accommodationId, foodPref } = req.body;
     
     if (!userId || !teamCode || !eventId) {
@@ -147,8 +223,9 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
     const teamResult = await client.query(
       `SELECT t.team_id, t.team_name, t.team_code, t.team_lead_id, t.event_id,
               e.event_name, e.min_team_size, e.max_team_size, e.status,
-              e.reg_start_time, e.reg_end_time, e.fee_amount,
-              lead.name as team_lead_name
+              e.reg_start_time, e.reg_end_time, e.fee_amount, e.venue,
+              e.event_start_time, e.event_end_time, e.whatsapp_link,
+              lead.name as team_lead_name, lead.email as team_lead_email
        FROM teams t
        JOIN events e ON t.event_id = e.event_id
        LEFT JOIN users lead ON t.team_lead_id = lead.user_id
@@ -186,11 +263,6 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
     
     if (team.reg_start_time) {
       const regStart = new Date(team.reg_start_time);
-      console.log(`Join team validation:
-        Current time (IST): ${toISTString(now)}
-        Reg start time: ${toISTString(regStart)}
-        Now < RegStart: ${now < regStart}`);
-      
       if (now < regStart) {
         await client.query("ROLLBACK");
         return res.status(400).json({ 
@@ -202,11 +274,6 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
     
     if (team.reg_end_time) {
       const regEnd = new Date(team.reg_end_time);
-      console.log(`Join team validation:
-        Current time (IST): ${toISTString(now)}
-        Reg end time: ${toISTString(regEnd)}
-        Now > RegEnd: ${now > regEnd}`);
-      
       if (now > regEnd) {
         await client.query("ROLLBACK");
         return res.status(400).json({ 
@@ -216,7 +283,16 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
       }
     }
 
-    await checkExistingRegistration(client, userId, team.event_id);
+    // Check existing registration
+    const existingCheck = await checkExistingRegistration(client, userId, team.event_id);
+    
+    if (existingCheck.exists) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ 
+        success: false, 
+        message: "You are already registered for this event" 
+      });
+    }
 
     if (team.team_lead_id === userId) {
       await client.query("ROLLBACK");
@@ -238,18 +314,20 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
     
     if (currentMembers >= team.max_team_size) {
       await client.query("ROLLBACK");
-      console.log("Team is already full");
       return res.status(400).json({ 
         success: false, 
         message: "Team is already full" 
       });
     }
 
-    // Create registration
+    const feeAmount = parseFloat(team.fee_amount);
+    const isFreeEvent = feeAmount <= 0;
+
+    // Create registration - payment is handled by team lead, so set to true
     const regResult = await client.query(
-      `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference) 
-       VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
-      [userId, team.event_id, accommodationId || null, foodPref || 'No food']
+      `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference, payment_status) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING registration_id, timestamp`,
+      [userId, team.event_id, accommodationId || null, foodPref || 'No food', true]
     );
     
     const registrationId = regResult.rows[0].registration_id;
@@ -294,14 +372,14 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
 
     await client.query("COMMIT");
     
-    return res.status(201).json({
+    const response = {
       success: true,
       message: "Successfully joined team",
       data: {
         registrationId,
         eventId: team.event_id,
         eventName: team.event_name,
-        eventType: "team",
+        eventType: "team" as const,
         teamName: team.team_name,
         teamCode: team.team_code,
         teamId: team.team_id,
@@ -316,11 +394,28 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
         minMembers: team.min_team_size,
         teamIsFull: (currentMembers + 1) >= team.max_team_size,
         feeAmount: team.fee_amount,
-        paymentRequired: parseFloat(team.fee_amount) > 0,
+        paymentRequired: false, // Team lead already paid
+        paymentStatus: true,
         timestamp: timestamp,
         accommodation: accommodationData
       }
-    });
+    };
+
+    // Send confirmation email to member who joined
+    if (userEmail) {
+      const eventDetails = {
+        event_name: team.event_name,
+        venue: team.venue,
+        event_start_time: team.event_start_time,
+        event_end_time: team.event_end_time,
+        whatsapp_link: team.whatsapp_link
+      };
+      sendRegistrationEmail(userEmail, userName || 'User', response.data, eventDetails).catch(error => {
+        console.error("Failed to send registration email:", error);
+      });
+    }
+
+    return res.status(201).json(response);
 
   } catch (error: any) {
     await client.query("ROLLBACK");
@@ -358,9 +453,56 @@ export const joinTeam = async (req: AuthenticatedRequest, res: Response) => {
   }
 };
 
-export const getTeamByCode = async (req: AuthenticatedRequest, res: Response) => {
-    console.log("🚀 getTeamByCode triggered!");
+// Helper function to send registration email
+async function sendRegistrationEmail(
+  userEmail: string,
+  userName: string,
+  registrationData: any,
+  eventDetails: any
+) {
+  try {
+    const emailData = {
+      userName,
+      userEmail,
+      eventName: registrationData.eventName || eventDetails.event_name,
+      eventVenue: eventDetails.venue,
+      ...(eventDetails.event_start_time && { eventStartDate: formatDate(new Date(eventDetails.event_start_time)) }),
+      ...(eventDetails.event_start_time && { eventStartTime: formatTime(new Date(eventDetails.event_start_time)) }),
+      ...(eventDetails.event_end_time && { eventEndDate: formatDate(new Date(eventDetails.event_end_time)) }),
+      ...(eventDetails.event_end_time && { eventEndTime: formatTime(new Date(eventDetails.event_end_time)) }),
+      registrationId: registrationData.registrationId,
+      eventType: registrationData.eventType,
+      teamName: registrationData.teamName,
+      teamCode: registrationData.teamCode,
+      isTeamLead: registrationData.isTeamLead,
+      teamMembers: registrationData.teamMembers,
+      currentMembers: registrationData.currentMembers,
+      maxMembers: registrationData.maxMembers,
+      minMembers: registrationData.minMembers,
+      feeAmount: registrationData.feeAmount,
+      paymentRequired: false, // Email only sent after payment, so always false here
+      accommodation: registrationData.accommodation,
+      foodPreference: registrationData.foodPreference,
+      whatsappLink: eventDetails.whatsapp_link
+    };
 
+    const emailTemplate = getRegistrationConfirmationTemplate(emailData);
+
+    await sendEmail({
+      to: userEmail,
+      subject: `Registration Confirmed - ${registrationData.eventName || eventDetails.event_name}`,
+      html: emailTemplate.html,
+      text: emailTemplate.text
+    });
+
+    console.log(`✅ Registration confirmation email sent to ${userEmail}`);
+  } catch (error) {
+    console.error("Error sending registration email:", error);
+    throw error;
+  }
+}
+
+export const getTeamByCode = async (req: AuthenticatedRequest, res: Response) => {
   const { teamCode } = req.params;
 
   if (!teamCode) {
@@ -384,7 +526,6 @@ export const getTeamByCode = async (req: AuthenticatedRequest, res: Response) =>
        WHERE t.team_code = $1`,
       [sanitizedTeamCode]
     );
-    
 
     if (teamResult.rowCount === 0) {
       return res.status(404).json({
@@ -404,7 +545,6 @@ export const getTeamByCode = async (req: AuthenticatedRequest, res: Response) =>
        ORDER BY r.timestamp`,
       [team.team_id]
     );
-    console.log("Members query result:", membersResult.rows);
 
     return res.json({
       success: true,
@@ -452,7 +592,8 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
     try {
       const registrationResult = await client.query(
         `SELECT r.registration_id, r.timestamp, r.payment_status, r.attendance_status,
-                r.accommodation_id, a.accommodation, e.event_name, e.max_team_size, e.fee_amount
+                r.accommodation_id, a.accommodation, e.event_name, e.max_team_size, 
+                e.fee_amount, r.food_preference
          FROM registrations r
          JOIN events e ON r.event_id = e.event_id
          LEFT JOIN accommodations a ON r.accommodation_id = a.accommodation_id
@@ -519,8 +660,9 @@ export const getRegistrationStatus = async (req: AuthenticatedRequest, res: Resp
           paymentStatus: registration.payment_status,
           attendanceStatus: registration.attendance_status,
           feeAmount: registration.fee_amount,
-          paymentRequired: parseFloat(registration.fee_amount) > 0,
+          paymentRequired: parseFloat(registration.fee_amount) > 0 && !registration.payment_status,
           accommodation: accommodationData,
+          foodPreference: registration.food_preference,
           teamInfo
         }
       });

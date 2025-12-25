@@ -33,7 +33,6 @@ export async function validateEventAccess(client: any, eventId: string): Promise
 
   const event = eventResult.rows[0];
 
-  // Validate event configuration
   if (event.min_team_size < 1 || event.max_team_size < 1 || event.min_team_size > event.max_team_size) {
     const error: CustomError = new Error("Invalid event configuration");
     error.statusCode = 400;
@@ -46,10 +45,8 @@ export async function validateEventAccess(client: any, eventId: string): Promise
     throw error;
   }
 
-  // Get current time (will be in IST because of database timezone settings)
   const now = getCurrentISTTime();
   
-  // Check registration timing
   if (event.reg_start_time) {
     const regStart = new Date(event.reg_start_time);
     console.log(` Registration validation:
@@ -81,36 +78,49 @@ export async function validateEventAccess(client: any, eventId: string): Promise
   return event;
 }
 
-export async function checkExistingRegistration(client: any, userId: string, eventId: string): Promise<void> {
+export async function checkExistingRegistration(
+  client: any, 
+  userId: string, 
+  eventId: string
+): Promise<{ exists: boolean; registration?: any }> {
   const existingReg = await client.query(
-    `SELECT registration_id FROM registrations 
-     WHERE student_id = $1 AND event_id = $2 FOR UPDATE`,
+    `SELECT r.registration_id, r.payment_status, r.timestamp, r.accommodation_id, 
+            r.food_preference, e.fee_amount
+     FROM registrations r
+     JOIN events e ON r.event_id = e.event_id
+     WHERE r.student_id = $1 AND r.event_id = $2 
+     FOR UPDATE OF r`,
     [userId, eventId]
   );
   
   if ((existingReg.rowCount ?? 0) > 0) {
-    const error: CustomError = new Error("You are already registered for this event");
-    error.statusCode = 400;
-    throw error;
+    return {
+      exists: true,
+      registration: existingReg.rows[0]
+    };
   }
+
+  return { exists: false };
 }
 
 export async function getCurrentRegistrationCount(client: any, eventId: string, isTeamEvent: boolean): Promise<number> {
   let countQuery: string;
-  isTeamEvent = false;
   
   if (isTeamEvent) {
+    // For team events, count only teams with paid team lead
     countQuery = `
       SELECT COUNT(DISTINCT t.team_id) as count
-      FROM team_registrations tr
-      JOIN teams t ON tr.team_id = t.team_id
-      WHERE t.event_id = $1
+      FROM teams t
+      JOIN team_registrations tr ON t.team_id = tr.team_id
+      JOIN registrations r ON tr.registration_id = r.registration_id
+      WHERE t.event_id = $1 AND r.payment_status = true AND r.student_id = t.team_lead_id
     `;
   } else {
+    // For solo events, count only PAID registrations
     countQuery = `
       SELECT COUNT(*) as count
       FROM registrations r
-      WHERE r.event_id = $1
+      WHERE r.event_id = $1 AND r.payment_status = true
     `;
   }
 
@@ -161,13 +171,15 @@ async function handleSoloEventRegistration(
   accommodationId?: number,
   foodPref?: string
 ): Promise<any> {
-  const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference)
-     VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
-    [userId, eventId, accommodationId || null, foodPref || 'No food']
-  );
-  
   const feeAmount = parseFloat(event.fee_amount);
+  const isFreeEvent = feeAmount <= 0;
+  
+  // For free events, set payment_status to true automatically
+  const regResult = await client.query(
+    `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference, payment_status)
+     VALUES ($1, $2, $3, $4, $5) RETURNING registration_id, timestamp`,
+    [userId, eventId, accommodationId || null, foodPref || 'No food', isFreeEvent]
+  );
   
   // Get accommodation details if provided
   let accommodationData = null;
@@ -186,13 +198,17 @@ async function handleSoloEventRegistration(
   
   return {
     success: true,
-    message: "Successfully registered for solo event",
+    message: isFreeEvent 
+      ? "Successfully registered for solo event" 
+      : "Registration created. Please complete payment to confirm your spot.",
+    sendEmail: isFreeEvent, // Only send email for free events immediately
     data: {
       registrationId: regResult.rows[0].registration_id,
       eventName: event.event_name,
       eventType: "solo",
       feeAmount: event.fee_amount,
-      paymentRequired: feeAmount > 0,
+      paymentRequired: !isFreeEvent,
+      paymentStatus: isFreeEvent,
       timestamp: regResult.rows[0].timestamp,
       accommodation: accommodationData,
       foodPreference: foodPref || 'No food'
@@ -210,9 +226,12 @@ async function handleTeamEventRegistration(
   accommodationId?: number,
   foodPref?: string
 ): Promise<any> {
+  const feeAmount = parseFloat(event.fee_amount);
+  const isFreeEvent = feeAmount <= 0;
+
   let finalTeamName: string;
 
-  // Use frontend-provided name if given
+  // Determine team name
   if (teamName && teamName.trim() !== "") {
     finalTeamName = teamName.trim();
 
@@ -229,43 +248,43 @@ async function handleTeamEventRegistration(
       error.statusCode = 400;
       throw error;
     }
-
   } else {
-    // Generate unique name if no name provided
     finalTeamName = await generateUniqueTeamName(client, eventId, userName);
   }
 
-  // Create registration 
+  // Create registration - for free events, set payment_status to true
   const regResult = await client.query(
-    `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference)
-     VALUES ($1, $2, $3, $4) RETURNING registration_id, timestamp`,
-    [userId, eventId, accommodationId || null, foodPref || 'No food']
+    `INSERT INTO registrations (student_id, event_id, accommodation_id, food_preference, payment_status)
+     VALUES ($1, $2, $3, $4, $5) RETURNING registration_id, timestamp`,
+    [userId, eventId, accommodationId || null, foodPref || 'No food', isFreeEvent]
   );
 
   const registrationId = regResult.rows[0].registration_id;
   const timestamp = regResult.rows[0].timestamp;
 
-  // Generate a team code
-  const teamCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase();
+  let teamId = null;
+  let teamCode = null;
 
-  // Insert team with finalTeamName
-  const teamResult = await client.query(
-    `INSERT INTO teams (team_name, team_lead_id, event_id, team_code)
-     VALUES ($1, $2, $3, $4) RETURNING team_id, team_code`,
-    [finalTeamName, userId, eventId, teamCodeGenerated]
-  );
+  // For FREE events, create team immediately
+  if (isFreeEvent) {
+    const teamCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-  const teamId = teamResult.rows[0].team_id;
-  const teamCode = teamResult.rows[0].team_code;
+    const teamResult = await client.query(
+      `INSERT INTO teams (team_name, team_lead_id, event_id, team_code)
+       VALUES ($1, $2, $3, $4) RETURNING team_id, team_code`,
+      [finalTeamName, userId, eventId, teamCodeGenerated]
+    );
 
-  // Link registration to team
-  await client.query(
-    `INSERT INTO team_registrations (registration_id, team_id) 
-     VALUES ($1, $2)`,
-    [registrationId, teamId]
-  );
+    teamId = teamResult.rows[0].team_id;
+    teamCode = teamResult.rows[0].team_code;
 
-  const feeAmount = parseFloat(event.fee_amount);
+    // Link registration to team
+    await client.query(
+      `INSERT INTO team_registrations (registration_id, team_id) 
+       VALUES ($1, $2)`,
+      [registrationId, teamId]
+    );
+  }
 
   // Get accommodation details if provided
   let accommodationData = null;
@@ -284,7 +303,10 @@ async function handleTeamEventRegistration(
 
   return {
     success: true,
-    message: "Successfully registered and team created",
+    message: isFreeEvent 
+      ? "Successfully registered and team created"
+      : "Registration created. Please complete payment to create your team.",
+    sendEmail: isFreeEvent, // Only send email for free events immediately
     data: {
       registrationId,
       eventName: event.event_name,
@@ -293,12 +315,13 @@ async function handleTeamEventRegistration(
       teamId,
       teamCode,
       isTeamLead: true,
-      currentMembers: 1,
+      currentMembers: isFreeEvent ? 1 : 0,
       maxMembers: event.max_team_size,
       minMembers: event.min_team_size,
-      canInviteMembers: true,
+      canInviteMembers: isFreeEvent,
       feeAmount: event.fee_amount,
-      paymentRequired: feeAmount > 0,
+      paymentRequired: !isFreeEvent,
+      paymentStatus: isFreeEvent,
       timestamp: timestamp,
       accommodation: accommodationData,
       foodPreference: foodPref || 'No food'
@@ -306,7 +329,6 @@ async function handleTeamEventRegistration(
   };
 }
 
-// Generate unique team name for auto-assignment
 async function generateUniqueTeamName(client: any, eventId: string, baseName: string): Promise<string> {
   const result = await client.query(`
     WITH existing_names AS (
