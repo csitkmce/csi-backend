@@ -1,4 +1,4 @@
-// src/database/init.ts - Updated with IST timezone
+// src/database/init.ts - Updated with IST timezone and programs table
 import { pool } from "../config/db.js";
 
 export async function initDB() {
@@ -11,20 +11,33 @@ export async function initDB() {
 
     // ENUMs
     await pool.query(`DO $$
-    BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-        CREATE TYPE user_role AS ENUM ('student', 'admin', 'master');
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_status') THEN
-        CREATE TYPE event_status AS ENUM ('active', 'inactive');
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attendance_status') THEN
-        CREATE TYPE attendance_status AS ENUM ('present', 'absent');
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN
-        CREATE TYPE payment_status AS ENUM ('pending', 'completed', 'failed', 'refunded');
-      END IF;
-    END$$;`);
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE user_role AS ENUM ('student', 'admin', 'master');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'event_status') THEN
+    CREATE TYPE event_status AS ENUM ('active', 'inactive');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'program_status') THEN
+    CREATE TYPE program_status AS ENUM ('active', 'inactive');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attendance_status') THEN
+    CREATE TYPE attendance_status AS ENUM ('present', 'absent');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN
+    CREATE TYPE payment_status AS ENUM ('pending', 'completed', 'failed', 'refunded');
+  END IF;
+END$$;`);
+
+    // Programs table - CREATE THIS FIRST before events table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS programs (
+        program_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        program_name VARCHAR(255) UNIQUE NOT NULL,
+        status program_status NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
 
     // Departments
     await pool.query(`
@@ -50,10 +63,11 @@ export async function initDB() {
       );
     `);
 
-    // Events - with proper constraints for solo vs team events
+    // Events - with proper constraints for solo vs team events AND program_id reference
     await pool.query(`
       CREATE TABLE IF NOT EXISTS events (
         event_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        program_id UUID REFERENCES programs(program_id) ON DELETE CASCADE,
         event_name VARCHAR(255) NOT NULL,
         event_description TEXT,
         event_image VARCHAR(255),
@@ -368,6 +382,11 @@ export async function initDB() {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_events_status_reg_time 
       ON events(status, reg_start_time, reg_end_time);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_events_program_start_time
+      ON events (program_id, event_start_time);
     `);
 
     await pool.query(`
