@@ -213,6 +213,8 @@ export const getProgramEvents = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Program name is required' });
     }
 
+    const now = new Date();
+
     const { rows } = await pool.query(`
       SELECT
         DATE(e.event_start_time) AS event_date,
@@ -225,6 +227,14 @@ export const getProgramEvents = async (req: Request, res: Response) => {
             'start_time', e.event_start_time,
             'end_time', e.event_end_time,
             'venue', e.venue,
+            'reg_start_time', e.reg_start_time,
+            'reg_end_time', e.reg_end_time,
+            'max_registrations', e.max_registrations,
+            'current_registrations', (
+                SELECT COUNT(*) 
+                FROM registrations r 
+                WHERE r.event_id = e.event_id
+            ),
             'coordinators', (
               SELECT json_agg(
                 json_build_object(
@@ -260,7 +270,29 @@ export const getProgramEvents = async (req: Request, res: Response) => {
       const formattedEvents = row.events.map((event: any) => {
         const startTime = new Date(event.start_time);
         const endTime = new Date(event.end_time);
+
+        const maxReg = event.max_registrations;
+        const currentReg = parseInt(event.current_registrations || '0', 10);
         
+        const regStart = event.reg_start_time ? new Date(event.reg_start_time) : null;
+        const regEnd = event.reg_end_time ? new Date(event.reg_end_time) : null;
+
+     
+        const isFull = maxReg !== null && currentReg >= maxReg;
+
+        const almostFull = !isFull && maxReg !== null && currentReg >= (maxReg * 0.8);
+
+      
+        const isTimeClosed = regEnd !== null && now > regEnd;
+        
+        const isTimeUpcoming = regStart !== null && now < regStart;
+
+      
+        const isClosed = isTimeClosed; 
+
+      
+        const isOpen = !isTimeClosed && !isTimeUpcoming && !isFull;
+
         return {
           event_id: event.event_id,
           event_name: event.event_name,
@@ -269,6 +301,13 @@ export const getProgramEvents = async (req: Request, res: Response) => {
           start_time: formatTime12Hour(startTime),
           end_time: formatTime12Hour(endTime),
           venue: event.venue,
+          
+          // Status Booleans
+          isOpen,
+          isClosed,
+          almostFull,
+          isFull,
+          
           coordinators: event.coordinators || [], 
         };
       });
