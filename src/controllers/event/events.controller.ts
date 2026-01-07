@@ -177,9 +177,42 @@ export const getEventDetails = async (
 };
 
 
+// Helper function to format date with ordinal suffix
+function formatDateWithOrdinal(date: Date): string {
+  const day = date.getDate();
+  const month = date.toLocaleDateString("en-GB", {
+    month: "long",
+    timeZone: "Asia/Kolkata",
+  });
+  const year = date.getFullYear();
+  
+  // Get ordinal suffix (st, nd, rd, th)
+  const getOrdinalSuffix = (n: number): string => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0] || "th";
+  };
+  
+  return `${day}${getOrdinalSuffix(day)} ${month} ${year}`;
+}
+
+// Helper function to format time in 12-hour format
+function formatTime12Hour(date: Date): string {
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  }).toLowerCase();
+}
+
 export const getProgramEvents = async (req: Request, res: Response) => {
   try {
-    const { programName } = req.params;
+    const programName = req.params.programName;
+
+    if (!programName) {
+      return res.status(400).json({ message: 'Program name is required' });
+    }
 
     const { rows } = await pool.query(`
       SELECT
@@ -211,7 +244,25 @@ export const getProgramEvents = async (req: Request, res: Response) => {
     }
 
     const groupedEvents = rows.reduce((acc, row) => {
-      acc[row.event_date] = row.events;
+      const eventDate = new Date(row.event_date);
+      const formattedDate = formatDateWithOrdinal(eventDate);
+      
+      const formattedEvents = row.events.map((event: any) => {
+        const startTime = new Date(event.start_time);
+        const endTime = new Date(event.end_time);
+        
+        return {
+          event_id: event.event_id,
+          event_name: event.event_name,
+          description: event.description,
+          image: event.image,
+          start_time: formatTime12Hour(startTime),
+          end_time: formatTime12Hour(endTime),
+          venue: event.venue,
+        };
+      });
+      
+      acc[formattedDate] = formattedEvents;
       return acc;
     }, {} as Record<string, any>);
 
