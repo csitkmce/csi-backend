@@ -149,6 +149,25 @@ END$$;`);
       $$ LANGUAGE plpgsql;
     `);
 
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS event_coordinators (
+    coordinator_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id UUID NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(50) NOT NULL,
+    position SMALLINT DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT check_position CHECK (position > 0 AND position <= 2)
+  );
+`);
+
+await pool.query(`
+  CREATE INDEX IF NOT EXISTS idx_event_coordinators_event 
+  ON event_coordinators(event_id, position);
+`);
+
+
+
     // Trigger function to auto-assign unique team_code per event
     await pool.query(`
       CREATE OR REPLACE FUNCTION assign_team_code()

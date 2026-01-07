@@ -177,8 +177,6 @@ export const getEventDetails = async (
 };
 
 
-
-
 // Helper function to format date with ordinal suffix
 function formatDateWithOrdinal(date: Date): string {
   const day = date.getDate();
@@ -226,7 +224,18 @@ export const getProgramEvents = async (req: Request, res: Response) => {
             'image', e.event_image,
             'start_time', e.event_start_time,
             'end_time', e.event_end_time,
-            'venue', e.venue
+            'venue', e.venue,
+            'coordinators', (
+              SELECT json_agg(
+                json_build_object(
+                  'name', ec.name,
+                  'phone', ec.phone_number
+                )
+                ORDER BY ec.position
+              )
+              FROM event_coordinators ec
+              WHERE ec.event_id = e.event_id
+            )
           )
           ORDER BY e.event_start_time
         ) AS events
@@ -260,6 +269,7 @@ export const getProgramEvents = async (req: Request, res: Response) => {
           start_time: formatTime12Hour(startTime),
           end_time: formatTime12Hour(endTime),
           venue: event.venue,
+          coordinators: event.coordinators || [], 
         };
       });
       
