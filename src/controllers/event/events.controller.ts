@@ -177,6 +177,8 @@ export const getEventDetails = async (
 };
 
 
+
+
 // Helper function to format date with ordinal suffix
 function formatDateWithOrdinal(date: Date): string {
   const day = date.getDate();
@@ -184,7 +186,6 @@ function formatDateWithOrdinal(date: Date): string {
     month: "long",
     timeZone: "Asia/Kolkata",
   });
-  const year = date.getFullYear();
   
   // Get ordinal suffix (st, nd, rd, th)
   const getOrdinalSuffix = (n: number): string => {
@@ -193,7 +194,7 @@ function formatDateWithOrdinal(date: Date): string {
     return s[(v - 20) % 10] || s[v] || s[0] || "th";
   };
   
-  return `${day}${getOrdinalSuffix(day)} ${month} ${year}`;
+  return `${day}${getOrdinalSuffix(day)} ${month}`;
 }
 
 // Helper function to format time in 12-hour format
