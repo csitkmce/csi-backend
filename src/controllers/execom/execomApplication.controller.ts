@@ -106,7 +106,7 @@ export const submitExecomApplication = async (
 
     // Verify the event exists and is active
     const eventResult = await client.query(
-      `SELECT event_id, event_name, status FROM events WHERE event_id = $1`,
+      `SELECT event_id, event_name, status, whatsapp_link FROM events WHERE event_id = $1`,
       [eventId]
     );
 
@@ -174,6 +174,7 @@ export const submitExecomApplication = async (
         preference2,
         preference3: preference3 || null,
         registrationId,
+        whatsappLink: event.whatsapp_link || undefined,
       });
 
       sendEmail({
