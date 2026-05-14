@@ -44,21 +44,21 @@ export function getPasswordResetEmailTemplate(resetLink: string, userName: strin
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #000; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
-          .content { background-color: #f9f9f9; padding: 30px; }
+          .header { background-color: #000; color: #fff; padding: 20px; text-align: center; }
+          .content { background-color: #fff; padding: 30px; border: 1px solid #000; }
           .button { 
             display: inline-block; 
             padding: 12px 30px; 
-            background-color: #4CAF50; 
-            color: white; 
+            background-color: #000; 
+            color: #fff; 
             text-decoration: none; 
             border-radius: 5px; 
             margin: 20px 0;
           }
-          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-          .warning { color: #d32f2f; font-weight: bold; }
+          .footer { text-align: center; padding: 20px; color: #555; font-size: 12px; }
+          .warning { color: #000; font-weight: bold; }
         </style>
       </head>
       <body>
@@ -73,12 +73,12 @@ export function getPasswordResetEmailTemplate(resetLink: string, userName: strin
               <a href="${resetLink}" class="button">Reset Password</a>
             </div>
             <p>Or copy and paste this link into your browser:</p>
-            <p style="word-break: break-all; color: #4CAF50;">${resetLink}</p>
+            <p style="word-break: break-all; color: #000;">${resetLink}</p>
             <p class="warning">This link will expire in 15 minutes.</p>
             <p>If you didn't request a password reset, you can safely ignore this email. Your password will not be changed.</p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} CSI TKMCE. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} CSI TKMCE. All rights reserved.</p>
             <p>This is an automated email, please do not reply.</p>
           </div>
         </div>
@@ -131,16 +131,16 @@ export function getRegistrationConfirmationTemplate(data: RegistrationEmailData)
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.registrationId)}`;
   
   const teamSection = data.eventType === 'team' ? `
-    <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
-      <h3 style="margin-top: 0; color: #856404;">Team Information</h3>
+    <div style="border: 1px solid #000; padding: 15px; margin: 20px 0;">
+      <h3 style="margin-top: 0; color: #000;">Team Information</h3>
       <p><strong>Team Name:</strong> ${data.teamName || 'N/A'}</p>
-      <p><strong>Team Code:</strong> <span style="font-size: 18px; font-weight: bold; color: #0066cc;">${data.teamCode}</span></p>
+      <p><strong>Team Code:</strong> <span style="font-size: 18px; font-weight: bold; color: #000;">${data.teamCode}</span></p>
       <p><strong>Your Role:</strong> ${data.isTeamLead ? 'Team Lead' : 'Team Member'}</p>
       <p><strong>Team Size:</strong> ${data.currentMembers}/${data.maxMembers} members</p>
-      ${data.minMembers && data.minMembers > 1 ? `<p style="color: #856404;"><em>⚠️ Minimum ${data.minMembers} members required</em></p>` : ''}
+      ${data.minMembers && data.minMembers > 1 ? `<p><em>Minimum ${data.minMembers} members required</em></p>` : ''}
       ${data.isTeamLead ? `
-        <div style="background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 10px; margin-top: 10px; border-radius: 4px;">
-          <p style="margin: 0; color: #0c5460;"><strong>As Team Lead:</strong> Share the team code <strong>${data.teamCode}</strong> with your team members so they can join!</p>
+        <div style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
+          <p style="margin: 0;"><strong>As Team Lead:</strong> Share the team code <strong>${data.teamCode}</strong> with your team members so they can join!</p>
         </div>
       ` : ''}
     </div>
@@ -156,8 +156,8 @@ export function getRegistrationConfirmationTemplate(data: RegistrationEmailData)
 
   const whatsappSection = data.whatsappLink ? `
     <div style="text-align: center; margin: 20px 0;">
-      <a href="${data.whatsappLink}" style="display: inline-block; padding: 12px 30px; background-color: #25D366; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
-        📱 Join WhatsApp Group
+      <a href="${data.whatsappLink}" style="display: inline-block; padding: 12px 30px; background-color: #000; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">
+        Join WhatsApp Group
       </a>
     </div>
   ` : '';
@@ -168,50 +168,43 @@ export function getRegistrationConfirmationTemplate(data: RegistrationEmailData)
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #000; }
           .container { max-width: 650px; margin: 0 auto; padding: 20px; }
           .header { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white; 
+            background-color: #000;
+            color: #fff; 
             padding: 30px 20px; 
             text-align: center; 
-            border-radius: 10px 10px 0 0;
           }
-          .content { background-color: #ffffff; padding: 30px; border: 1px solid #e0e0e0; }
+          .content { background-color: #fff; padding: 30px; border: 1px solid #000; border-top: none; }
           .qr-section { 
             text-align: center; 
             padding: 20px; 
-            background-color: #f8f9fa; 
-            border-radius: 8px;
+            border: 1px solid #ccc;
             margin: 20px 0;
           }
           .qr-code { 
-            border: 4px solid #667eea; 
-            border-radius: 8px; 
+            border: 2px solid #000; 
             padding: 10px; 
-            background: white;
+            background: #fff;
             display: inline-block;
           }
           .event-details { 
-            background-color: #f0f4ff; 
             padding: 20px; 
-            border-radius: 8px; 
             margin: 20px 0;
-            border-left: 4px solid #667eea;
+            border-left: 3px solid #000;
           }
           .footer { 
             text-align: center; 
             padding: 20px; 
-            color: #666; 
+            color: #555; 
             font-size: 12px; 
-            background-color: #f8f9fa;
-            border-radius: 0 0 10px 10px;
           }
           .button { 
             display: inline-block; 
             padding: 12px 30px; 
-            background-color: #667eea; 
-            color: white; 
+            background-color: #000; 
+            color: #fff; 
             text-decoration: none; 
             border-radius: 5px; 
             margin: 10px 0;
@@ -222,31 +215,31 @@ export function getRegistrationConfirmationTemplate(data: RegistrationEmailData)
       <body>
         <div class="container">
           <div class="header">
-            <h1 style="margin: 0;">🎉 Registration Confirmed!</h1>
+            <h1 style="margin: 0;">Registration Confirmed</h1>
             <p style="margin: 10px 0 0 0; font-size: 18px;">CSI TKMCE</p>
           </div>
           
           <div class="content">
             <p>Dear <strong>${data.userName}</strong>,</p>
             
-            <p>Congratulations! Your registration for <strong>${data.eventName}</strong> has been confirmed successfully.</p>
+            <p>Your registration for <strong>${data.eventName}</strong> has been confirmed successfully.</p>
             
             ${teamSection}
             
             <div class="qr-section">
-              <h3 style="margin-top: 0; color: #667eea;">Your Registration QR Code</h3>
+              <h3 style="margin-top: 0; color: #000;">Your Registration QR Code</h3>
               <div class="qr-code">
                 <img src="${qrCodeUrl}" alt="Registration QR Code" width="200" height="200" />
               </div>
-              <p style="margin: 15px 0 5px 0; color: #666; font-size: 14px;">Registration ID:</p>
-              <p style="margin: 0; font-family: monospace; font-size: 16px; font-weight: bold; color: #667eea;">${data.registrationId}</p>
-              <p style="margin: 15px 0 0 0; color: #666; font-size: 13px;">
-                <em>📱 Save this QR code for event check-in</em>
+              <p style="margin: 15px 0 5px 0; color: #555; font-size: 14px;">Registration ID:</p>
+              <p style="margin: 0; font-family: monospace; font-size: 16px; font-weight: bold; color: #000;">${data.registrationId}</p>
+              <p style="margin: 15px 0 0 0; color: #555; font-size: 13px;">
+                <em>Save this QR code for event check-in</em>
               </p>
             </div>
             
             <div class="event-details">
-              <h3 style="margin-top: 0; color: #667eea;">Event Details</h3>
+              <h3 style="margin-top: 0; color: #000;">Event Details</h3>
               <p><strong>Event Name:</strong> ${data.eventName}</p>
               ${data.eventVenue ? `<p><strong>Venue:</strong> ${data.eventVenue}</p>` : ''}
               ${data.eventStartDate ? `<p><strong>Start:</strong> ${data.eventStartDate} at ${data.eventStartTime}</p>` : ''}
@@ -257,8 +250,8 @@ export function getRegistrationConfirmationTemplate(data: RegistrationEmailData)
             
             ${whatsappSection}
             
-            <div style="background-color: #e7f3ff; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0;">
-              <h4 style="margin-top: 0; color: #1976D2;">Important Notes:</h4>
+            <div style="border-left: 3px solid #000; padding: 15px; margin: 20px 0;">
+              <h4 style="margin-top: 0; color: #000;">Important Notes</h4>
               <ul style="margin: 10px 0; padding-left: 20px;">
                 <li>Please bring a valid ID card to the event</li>
                 <li>Show your QR code at the registration desk</li>
@@ -274,7 +267,7 @@ export function getRegistrationConfirmationTemplate(data: RegistrationEmailData)
           </div>
           
           <div class="footer">
-            <p style="margin-top: 15px;">© ${new Date().getFullYear()} CSI TKMCE. All rights reserved.</p>
+            <p style="margin-top: 15px;">&copy; ${new Date().getFullYear()} CSI TKMCE. All rights reserved.</p>
             <p>This is an automated email, please do not reply.</p>
           </div>
         </div>
@@ -286,7 +279,7 @@ Registration Confirmed - CSI TKMCE
 
 Dear ${data.userName},
 
-Congratulations! Your registration for ${data.eventName} has been confirmed successfully.
+Your registration for ${data.eventName} has been confirmed successfully.
 
 Registration ID: ${data.registrationId}
 
@@ -315,6 +308,137 @@ IMPORTANT NOTES:
 View your dashboard: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/
 
 
+
+© ${new Date().getFullYear()} CSI TKMCE. All rights reserved.
+    `
+  };
+}
+
+// Execom Application Confirmation Email Template
+interface ExecomApplicationEmailData {
+  userName: string;
+  userEmail: string;
+  preference1: string;
+  preference2: string;
+  preference3?: string | null;
+  registrationId: string;
+}
+
+export function getExecomApplicationConfirmationTemplate(data: ExecomApplicationEmailData) {
+  return {
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #000; }
+          .container { max-width: 650px; margin: 0 auto; padding: 20px; }
+          .header { 
+            background-color: #000;
+            color: #fff; 
+            padding: 30px 20px; 
+            text-align: center; 
+          }
+          .content { background-color: #fff; padding: 30px; border: 1px solid #000; border-top: none; }
+          .preferences { 
+            padding: 20px; 
+            margin: 20px 0;
+            border-left: 3px solid #000;
+          }
+          .preference-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #ccc;
+          }
+          .preference-item:last-child { border-bottom: none; }
+          .preference-rank {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            line-height: 28px;
+            text-align: center;
+            background-color: #000;
+            color: #fff;
+            border-radius: 50%;
+            font-weight: bold;
+            margin-right: 12px;
+            font-size: 14px;
+          }
+          .footer { 
+            text-align: center; 
+            padding: 20px; 
+            color: #555; 
+            font-size: 12px; 
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1 style="margin: 0;">Application Received</h1>
+            <p style="margin: 10px 0 0 0; font-size: 18px;">CSI TKMCE Execom Recruitment</p>
+          </div>
+          
+          <div class="content">
+            <p>Dear <strong>${data.userName}</strong>,</p>
+            
+            <p>Thank you for applying for the <strong>CSI TKMCE Executive Committee</strong>. Your application has been received successfully.</p>
+            
+            <div class="preferences">
+              <h3 style="margin-top: 0; color: #000;">Your Preferences</h3>
+              <div class="preference-item">
+                <span class="preference-rank">1</span>
+                <strong>${data.preference1}</strong>
+              </div>
+              <div class="preference-item">
+                <span class="preference-rank">2</span>
+                <strong>${data.preference2}</strong>
+              </div>
+              ${data.preference3 ? `
+              <div class="preference-item">
+                <span class="preference-rank">3</span>
+                <strong>${data.preference3}</strong>
+              </div>
+              ` : ''}
+            </div>
+            
+            <div style="border-left: 3px solid #000; padding: 15px; margin: 20px 0;">
+              <h4 style="margin-top: 0; color: #000;">What's Next?</h4>
+              <ul style="margin: 10px 0; padding-left: 20px;">
+                <li>Our team will review all applications carefully</li>
+                <li>Shortlisted candidates may be contacted for further rounds</li>
+                <li>Final selections will be announced soon</li>
+              </ul>
+            </div>
+            
+            <p style="color: #555; font-size: 14px;">Registration ID: <strong style="color: #000; font-family: monospace;">${data.registrationId}</strong></p>
+          </div>
+          
+          <div class="footer">
+            <p style="margin-top: 15px;">&copy; ${new Date().getFullYear()} CSI TKMCE. All rights reserved.</p>
+            <p>This is an automated email, please do not reply.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `
+Execom Application Received - CSI TKMCE
+
+Dear ${data.userName},
+
+Thank you for applying for the CSI TKMCE Executive Committee. Your application has been received successfully.
+
+YOUR PREFERENCES:
+1. ${data.preference1}
+2. ${data.preference2}
+${data.preference3 ? `3. ${data.preference3}` : ''}
+
+WHAT'S NEXT:
+- Our team will review all applications carefully
+- Shortlisted candidates may be contacted for further rounds
+- Final selections will be announced soon
+
+Registration ID: ${data.registrationId}
 
 © ${new Date().getFullYear()} CSI TKMCE. All rights reserved.
     `

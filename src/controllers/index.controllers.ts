@@ -10,7 +10,7 @@ import {
 export const getHome = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.user_id;
-    const userName = req.user?.name;  
+    const userName = req.user?.name;
     if (!userId) {
       return res.status(400).json({ message: "User ID missing from token" });
     }
@@ -31,7 +31,7 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
     const { name, email, batch, year, department_name } = userData;
 
 
-    
+
     const { rows } = await pool.query(
       `SELECT e.event_id, e.event_name, e.event_description, e.event_image, e.venue,
               e.event_start_time, e.event_end_time, e.whatsapp_link,
@@ -50,7 +50,7 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
     for (const event of rows) {
       const start = new Date(event.event_start_time);
       const end = new Date(event.event_end_time);
-      
+
       const eventData: any = {
         id: event.event_id,
         name: event.event_name,
@@ -90,7 +90,7 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
            ORDER BY CASE WHEN t.team_lead_id = u.user_id THEN 0 ELSE 1 END`,
           [event.registration_id]
         );
-        
+
         if ((teamInfo?.rowCount ?? 0) > 0) {
           const teamData = teamInfo.rows[0];
           const teamCode = teamData.team_code;
@@ -119,14 +119,14 @@ export const getHome = async (req: AuthenticatedRequest, res: Response) => {
       }
       events.push(eventData);
     }
-    
-    return res.json({ 
-      name: name, 
+
+    return res.json({
+      name: name,
       email: email,
       department: department_name,
-      batch: batch.trim(), 
+      batch: batch.trim(),
       graduationYear: year,
-      events 
+      events
     });
   } catch (err) {
     console.error("Error in getHome:", err);

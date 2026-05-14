@@ -329,6 +329,31 @@ await pool.query(`
       );
     `);
 
+    // Execom position applications (3 ranked preferences per user)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS execom_applications (
+        application_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID UNIQUE NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        registration_id UUID UNIQUE REFERENCES registrations(registration_id) ON DELETE CASCADE,
+        preference1 VARCHAR(255) NOT NULL,
+        preference2 VARCHAR(255) NOT NULL,
+        preference3 VARCHAR(255),
+        answer TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_execom_applications_user
+      ON execom_applications(user_id);
+    `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_execom_applications_registration
+      ON execom_applications(registration_id);
+    `);
+
     // Leetcode users table for leaderboard
     await pool.query(`
       CREATE TABLE IF NOT EXISTS leetcode_users (
