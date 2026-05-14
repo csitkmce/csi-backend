@@ -139,12 +139,35 @@ export default getHome;
 export const getUser = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.user_id;
-    const userName = req.user?.name;
-    const userEmail = req.user?.email;  
     if (!userId) {
       return res.status(400).json({ message: "User ID missing from token" });
-    } 
-    return res.json({ userId, userName, userEmail });
+    }
+
+    const result = await pool.query(
+      `SELECT u.user_id, u.name, u.email, u.phone_number, u.batch, u.year, u.college,
+              d.department_name
+       FROM users u
+       LEFT JOIN departments d ON u.department_id = d.department_id
+       WHERE u.user_id = $1`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = result.rows[0];
+
+    return res.json({
+      userId: user.user_id,
+      userName: user.name,
+      userEmail: user.email,
+      phoneNumber: user.phone_number,
+      batch: user.batch?.trim() ?? null,
+      year: user.year,
+      college: user.college,
+      department: user.department_name,
+    });
   } catch (err) {
     console.error("Error in getUser:", err);
     return res.status(500).json({ message: "Internal server error" });
