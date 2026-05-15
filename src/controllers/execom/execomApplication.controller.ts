@@ -205,9 +205,15 @@ export const getExecomApplication = async (
       });
     }
 
+    // Fetch whatsapp link from config
+    const configResult = await pool.query(
+      `SELECT whatsapp_link FROM execom_application_config WHERE config_id = 1`
+    );
+
     return res.status(200).json({
       success: true,
       application: result.rows[0],
+      whatsappLink: configResult.rows[0]?.whatsapp_link || null,
     });
   } catch (error) {
     console.error("Error fetching execom application:", error);
