@@ -311,7 +311,7 @@ interface ExecomApplicationEmailData {
   preference1: string;
   preference2: string;
   preference3?: string | null;
-  registrationId: string;
+  applicationId: string;
   whatsappLink?: string;
 }
 
@@ -396,7 +396,7 @@ export function getExecomApplicationConfirmationTemplate(data: ExecomApplication
               
               <div class="divider"></div>
               
-              <p style="font-size: 12px; color: #999; margin: 0;">Registration ID: <strong style="color: #111; font-family: monospace;">${data.registrationId}</strong></p>
+              <p style="font-size: 12px; color: #999; margin: 0;">Application ID: <strong style="color: #111; font-family: monospace;">${data.applicationId}</strong></p>
             </div>
           </div>
           
@@ -428,7 +428,7 @@ WHAT HAPPENS NEXT:
 ${data.whatsappLink ? `
 Join the WhatsApp group: ${data.whatsappLink}` : ''}
 
-Registration ID: ${data.registrationId}
+Application ID: ${data.applicationId}
 
 © ${new Date().getFullYear()} CSI TKMCE. All rights reserved.
     `

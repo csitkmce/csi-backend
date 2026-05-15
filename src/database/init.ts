@@ -329,12 +329,32 @@ await pool.query(`
       );
     `);
 
-    // Execom position applications (3 ranked preferences per user)
+    // Execom application config (single-row settings table)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS execom_application_config (
+        config_id SERIAL PRIMARY KEY,
+        is_active BOOLEAN DEFAULT false,
+        start_time TIMESTAMPTZ,
+        end_time TIMESTAMPTZ,
+        whatsapp_link VARCHAR(500),
+        question TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Seed a default config row if none exists
+    await pool.query(`
+      INSERT INTO execom_application_config (config_id, is_active)
+      VALUES (1, false)
+      ON CONFLICT (config_id) DO NOTHING;
+    `);
+
+    // Execom position applications (ranked preferences per user)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS execom_applications (
         application_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         user_id UUID UNIQUE NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-        registration_id UUID UNIQUE REFERENCES registrations(registration_id) ON DELETE CASCADE,
         preference1 VARCHAR(255) NOT NULL,
         preference2 VARCHAR(255) NOT NULL,
         preference3 VARCHAR(255),
@@ -347,11 +367,6 @@ await pool.query(`
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_execom_applications_user
       ON execom_applications(user_id);
-    `);
-
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_execom_applications_registration
-      ON execom_applications(registration_id);
     `);
 
     // Leetcode users table for leaderboard

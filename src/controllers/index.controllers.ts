@@ -158,6 +158,14 @@ export const getUser = async (req: AuthenticatedRequest, res: Response) => {
 
     const user = result.rows[0];
 
+    // Check if user has submitted an execom application
+    const execomApp = await pool.query(
+      `SELECT application_id, preference1, preference2, preference3, created_at
+       FROM execom_applications
+       WHERE user_id = $1`,
+      [userId]
+    );
+
     return res.json({
       userId: user.user_id,
       userName: user.name,
@@ -167,6 +175,7 @@ export const getUser = async (req: AuthenticatedRequest, res: Response) => {
       year: user.year,
       college: user.college,
       department: user.department_name,
+      hasExecomApplication: (execomApp.rowCount ?? 0) > 0,
     });
   } catch (err) {
     console.error("Error in getUser:", err);
