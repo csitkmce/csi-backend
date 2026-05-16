@@ -5,7 +5,7 @@ import { sendEmail, getExecomApplicationConfirmationTemplate } from "../../confi
 
 const VALID_POSITIONS = [
   "Program Coordinator",
-  "Documentation",
+  "Documentation team",
   "Media team",
   "Publicity",
   "Tech team",
