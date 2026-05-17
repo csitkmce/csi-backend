@@ -157,6 +157,7 @@ export const submitExecomApplication = async (
       success: true,
       message: "Application submitted successfully",
       application,
+      whatsappLink: config.whatsapp_link || null,
     });
   } catch (error: any) {
     console.error("Error submitting execom application:", error);
