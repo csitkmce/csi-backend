@@ -10,7 +10,7 @@ const VALID_POSITIONS = [
   "Publicity Team",
   "Technical Team",
   "Volunteer",
-  "Design team",
+  "Design Team",
   "Membership Team",
 ] as const;
 
