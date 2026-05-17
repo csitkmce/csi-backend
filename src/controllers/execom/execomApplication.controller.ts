@@ -5,12 +5,13 @@ import { sendEmail, getExecomApplicationConfirmationTemplate } from "../../confi
 
 const VALID_POSITIONS = [
   "Program Coordinator",
-  "Documentation team",
-  "Media team",
-  "Publicity team",
-  "Tech team",
+  "Documentation Team",
+  "Social Media Team",
+  "Publicity Team",
+  "Technical Team",
   "Volunteer",
   "Design team",
+  "Membership Team",
 ] as const;
 
 type ExecomPosition = (typeof VALID_POSITIONS)[number];
