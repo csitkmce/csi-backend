@@ -9,9 +9,7 @@ const VALID_POSITIONS = [
   "Social Media Team",
   "Publicity Team",
   "Technical Team",
-  "Volunteer",
   "Design Team",
-  "Membership Team",
 ] as const;
 
 type ExecomPosition = (typeof VALID_POSITIONS)[number];
