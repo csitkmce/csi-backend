@@ -36,6 +36,33 @@ export const submitExecomApplication = async (
         .json({ success: false, message: "User ID missing from token" });
     }
 
+    // Fetch user's department_id to check eligibility
+    const userResult = await pool.query(
+      `SELECT department_id FROM users WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (userResult.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const departmentId = userResult.rows[0].department_id;
+    const ELIGIBLE_DEPARTMENTS = [
+      "5830cdf0-156d-4445-ac70-cac89d925a2c", // COMPUTER SCIENCE & ENGINEERING
+      "c9c62a3b-a1ca-4f8c-9fad-de281706c448", // ELECTRICAL & COMPUTER ENGINEERING
+      "dcfdd200-39e5-4769-8382-c5b208f854f9", // MASTER OF COMPUTER APPLICATIONS
+    ];
+
+    if (!ELIGIBLE_DEPARTMENTS.includes(departmentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "You are not eligible to apply. Only students from CS, ER, or MCA departments are eligible.",
+      });
+    }
+
     const { preference1, preference2, preference3, answer } = req.body;
 
     // Validate mandatory fields
