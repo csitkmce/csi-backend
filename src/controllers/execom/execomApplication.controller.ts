@@ -54,12 +54,13 @@ export const submitExecomApplication = async (
       "5830cdf0-156d-4445-ac70-cac89d925a2c", // COMPUTER SCIENCE & ENGINEERING
       "c9c62a3b-a1ca-4f8c-9fad-de281706c448", // ELECTRICAL & COMPUTER ENGINEERING
       "dcfdd200-39e5-4769-8382-c5b208f854f9", // MASTER OF COMPUTER APPLICATIONS
+      "3149e9e3-00bc-461b-be9f-c1b15b69b428", // COMPUTER SCIENCE & ENGINEERING (AI)
     ];
 
     if (!ELIGIBLE_DEPARTMENTS.includes(departmentId)) {
       return res.status(400).json({
         success: false,
-        message: "You are not eligible to apply. Only students from CS, ER, or MCA departments are eligible.",
+        message: "You are not eligible to apply. Only students from CS, ER, MCA, or CS(AI) departments are eligible.",
       });
     }
 
